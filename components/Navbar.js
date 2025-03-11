@@ -56,7 +56,7 @@ export default function NavbarSection() {
 
       <NavbarContent className="hidden sm:flex gap-4" justify="center">
         <NavbarItem>
-          <Link color="foreground" href="/home">
+          <Link color="foreground" href="/">
             Home
           </Link>
         </NavbarItem>
