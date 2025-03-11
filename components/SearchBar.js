@@ -1,31 +1,9 @@
-import { useState, useRef, useEffect } from "react";
+// components/SearchBar.jsx
+import { useRef } from "react";
 
-const SearchBar = ({ onSearch }) => {
-  const [query, setQuery] = useState("");
+const SearchBar = () => {
   const clickPoint = useRef();
-  const searchTimeout = useRef();
-
-  const handleSearch = async (term) => {
-    clearTimeout(searchTimeout.current);
-
-    if (term.length === 0) {
-      onSearch([], "");
-      return;
-    }
-
-    searchTimeout.current = setTimeout(async () => {
-      try {
-        const response = await fetch(
-          `/api/search?q=${encodeURIComponent(term)}`
-        );
-        const data = await response.json();
-        onSearch(data.results, term);
-      } catch (error) {
-        console.error("Search failed:", error);
-      }
-    }, 300);
-  };
-
+  
   const handleFocus = () => {
     clickPoint.current.style.display = "none";
   };
@@ -53,15 +31,10 @@ const SearchBar = ({ onSearch }) => {
         </div>
         <input
           type="text"
-          className="block p-2 pl-10 w-full text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:pl-3 focus:outline-none focus:ring-2 focus:ring-purple-600"
-          placeholder="Search..."
+          className="block p-2 pl-10 w-full text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:pl-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          placeholder="Search for sessions..."
           onFocus={handleFocus}
           onBlur={handleBlur}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            handleSearch(e.target.value);
-          }}
-          value={query}
         />
       </div>
     </div>
