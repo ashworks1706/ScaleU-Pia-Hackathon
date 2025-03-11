@@ -12,13 +12,13 @@ const VideoCard = ({ videoSrc, title, highlightedWord }) => {
     : title;
     
   return (
-    <div className="flex flex-col rounded-xl overflow-hidden shadow-md border border-gray-200">
-      <div className="relative w-full aspect-video bg-gray-100">
+    <div key={title} className="flex flex-row rounded-xl w-full overflow-hidden shadow-md border border-gray-200">
+      <div className="relative w-full aspect-video bg-blue-600">
         <video className="w-full h-full object-cover">
           <source src={videoSrc} type="video/mp4" />
         </video>
       </div>
-      <div className="p-4">
+      <div className="p-4  ">
         <h3 className="font-medium selection:bg-purple-200 selection:text-purple-900">
           {titleWithHighlight}
         </h3>
@@ -29,7 +29,7 @@ const VideoCard = ({ videoSrc, title, highlightedWord }) => {
 
 const VideoGrid = ({ videos, highlightTerm }) => {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 p-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6 p-4">
       {videos.map((video, index) => (
         <VideoCard 
           key={index}

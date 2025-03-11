@@ -1,9 +1,9 @@
-// pages/index.js or pages/videos.js
+'use client'
 import { useState } from "react";
-import SearchBar from "../components/SearchBar";
-import VideoGrid from "../components/VideoGrid";
+import SearchBar from "../../components/SearchBar";
+import VideoGrid from "../../components/VideoCard";
 
-export default function Videos() {
+export default function Home() {
   // Sample video data - in a real app, this would come from an API
   const [videos, setVideos] = useState([
     {
@@ -33,7 +33,7 @@ export default function Videos() {
   };
   
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen dark bg-black">
       <main className="container mx-auto py-8">
         <h1 className="text-3xl font-bold text-center mb-8">Video Library</h1>
         <SearchBar onSearch={handleSearch} />
