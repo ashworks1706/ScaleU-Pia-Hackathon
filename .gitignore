@@ -43,3 +43,4 @@ next-env.d.ts
 venv
 # clerk configuration (can include secrets)
 /.clerk/
+python/venv

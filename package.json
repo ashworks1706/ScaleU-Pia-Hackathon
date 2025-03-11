@@ -2,12 +2,16 @@
   "name": "groupthink",
   "version": "0.1.0",
   "private": true,
-  "scripts": {
-    "dev": "next dev --turbopack",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
-  },
+  
+    "scripts": {
+      "dev": "next dev --turbopack",
+      "prebackend": "python -m venv python/venv || echo 'Virtual environment exists, skipping creation'",
+      "backend-unix": "source python/venv/bin/activate && pip install -r python/requirements.txt && uvicorn main:app --reload --app-dir python",
+      "backend-win": "python\\venv\\Scripts\\activate.bat && pip install -r python\\requirements.txt && cd python && uvicorn main:app --reload",
+      "backend": "node -e \"process.platform === 'win32' ? process.exit(1) : process.exit(0)\" && npm run backend-unix || npm run backend-win",
+      "app": "concurrently \"npm run dev\" \"npm run backend\""
+    },
+  
   "dependencies": {
     "@clerk/nextjs": "^6.12.4",
     "@heroui/react": "^2.7.5",
@@ -21,6 +25,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
+    "concurrently": "^8.2.2",
     "eslint": "^9",
     "eslint-config-next": "15.2.2",
     "tailwindcss": "^4"
