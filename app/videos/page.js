@@ -1,44 +1,36 @@
+// pages/videos/index.jsx
 'use client'
 import { useState } from "react";
 import SearchBar from "../../components/SearchBar";
 import VideoGrid from "../../components/VideoCard";
+import NavbarSection from "../../components/Navbar";
 
 export default function Home() {
-  // Sample video data - in a real app, this would come from an API
-  const [videos, setVideos] = useState([
-    {
-      src: "/videos/sample1.mp4",
-      title: "How to build a Next.js application with Tailwind CSS"
-    },
-    {
-      src: "/videos/sample2.mp4",
-      title: "Creating responsive layouts with Tailwind CSS Grid"
-    },
-    {
-      src: "/videos/sample3.mp4",
-      title: "Learning React Hooks for state management"
-    },
-    {
-      src: "/videos/sample4.mp4",
-      title: "Building modern UI with HeroUI components"
-    }
-  ]);
-  
-  const [searchTerm, setSearchTerm] = useState("Tailwind");
-  
-  // In a real app, this would filter videos based on search
-  const handleSearch = (term) => {
+  const [videos, setVideos] = useState([]);
+  const [searchTerm, setSearchTerm] = useState("");
+
+  const handleSearch = (results, term) => {
     setSearchTerm(term);
-    // Filter videos based on search term
+    setVideos(results.map(video => ({
+      link: video.link,
+      title: video.title,
+      upvotes: video.upvotes,
+      relevant: video.relevant
+    })));
   };
-  
+
   return (
-    <div className="min-h-screen dark bg-black">
-      <main className="container mx-auto py-8">
-        <h1 className="text-3xl font-bold text-center mb-8">Video Library</h1>
-        <SearchBar onSearch={handleSearch} />
-        <VideoGrid videos={videos} highlightTerm={searchTerm} />
-      </main>
-    </div>
+    <>
+      <NavbarSection/>
+      <div className="min-h-screen bg-white dark:bg-gray-900 transition-colors">
+        <main className="container mx-auto py-8 px-4">
+          <h1 className="text-3xl font-bold text-center mb-8 text-gray-900 dark:text-white">
+            Video Library
+          </h1>
+          <SearchBar onSearch={handleSearch} />
+          <VideoGrid videos={videos} />
+        </main>
+      </div>
+    </>
   );
 }
