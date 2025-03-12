@@ -109,7 +109,7 @@ def get_session(session_id):
         if not results or len(results) == 0:
             return jsonify({"error": "Session not found"}), 404
         # Use the first element from the returned list.
-        session = results
+        session = results[0]
         return jsonify({
         "host_id": session.payload.get("host_id", ""),
         "title": session.payload.get("title", ""),

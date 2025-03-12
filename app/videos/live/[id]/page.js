@@ -272,10 +272,13 @@ const [finalVideoURL, setFinalVideoURL] = useState("")
       formData.append(type, blob, `${id}_${type}.webm`);
       // For canvas recordings, send to the dedicated backend endpoint
       if (type === "canvas") {
+        console.log(" Posting recordings data ")
         const response = await fetch(`/python/recordings/${id}`, {
           method: "POST",
           body: formData,
         });
+        console.log("Recordings data response")
+        console.log(response.json())
         setFinalVideoURL(response.json().video_url)
         if (!response.ok) {
           const errorText = await response.text();

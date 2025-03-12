@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable react/display-name */
-import { forwardRef, useImperativeHandle, useEffect, useState, useRef } from "react";
+import { forwardRef, useImperativeHandle, useEffect, useState, useRef, useCallback } from "react";
 
 const CanvasWrapper = forwardRef(({ initialData, onChange, onReady }, ref) => {
   const canvasRef = useRef(null);
