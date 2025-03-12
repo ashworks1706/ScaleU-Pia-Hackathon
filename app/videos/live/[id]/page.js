@@ -6,6 +6,7 @@ import { useAuth } from '@clerk/nextjs'
 import NavbarSection from '../../../../components/Navbar'
 import dynamic from 'next/dynamic'
 import { Button, Input, Card, CardBody, CardHeader, CardFooter, Chip, Avatar, Divider, Badge, Tooltip } from '@heroui/react'
+import 'tldraw/tldraw.css'
 
 const Whiteboard = dynamic(
     () => import('@tldraw/tldraw').then((mod) => mod.Tldraw),

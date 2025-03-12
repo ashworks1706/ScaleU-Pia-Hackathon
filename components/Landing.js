@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import NavbarSection from "./Navbar"; // Importing the NavbarSection component
 import { UserButton } from "@clerk/nextjs";
-import Footer from "./Footer"; // Importing the SidebarChat component
+import Footer from "./Footer"; // Importing the Footer component
 import SidebarChat from "./SideBar"; // Importing the SidebarChat component
 import { useRouter } from "next/navigation";
 
@@ -27,6 +27,7 @@ export default function Landing() {
     ],
   });
   const [newMessage, setNewMessage] = useState("");
+
   const handleMainSearch = (e) => {
     e.preventDefault();
     const searchQuery = e.target.search.value;
@@ -34,6 +35,7 @@ export default function Landing() {
       app.push(`/videos?q=${encodeURIComponent(searchQuery)}`);
     }
   };
+
   // Sample data for sessions
   const sessions = [
     {
@@ -84,44 +86,59 @@ export default function Landing() {
   };
 
   return (
-    <div className="flex flex-row justify-between w-full min-h-screen  bg-gradient-to-b from-gray-900 to-gray-800 text-white">
+    <div className="flex flex-row justify-between w-full min-h-screen bg-gradient-to-b from-gray-900 to-gray-950 text-white">
       {/* Sidebar */}
       <SidebarChat />
+
       {/* Main Content */}
       <div className="flex-1 w-full min-h-screen justify-between flex flex-col">
-        <NavbarSection />
         {/* Navbar */}
+        <NavbarSection />
 
- 
         {/* Search Bar Section with CTA */}
-        <section className="py-12 ">
-        <div className="container mx-auto px-4 text-center">
-          <h2 className="text-3xl font-bold mb-4 text-white">
-            Find the Perfect Session
-          </h2>
-          <form onSubmit={handleMainSearch}>
-            <div className="max-w-2xl mx-auto">
-              <input
-                type="text"
-                name="search"
-                placeholder="Search sessions..."
-                className="w-full p-2 rounded-lg bg-gray-700 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <button type="submit" className="hidden">Search</button>
-            </div>
-          </form>
-        </div>
-      </section>
-
+        <section className="py-12">
+          <div className="container mx-auto px-4 text-center">
+            <h2 className="text-4xl font-bold mb-6 text-white">
+              Find the Perfect Session
+            </h2>
+            <form onSubmit={handleMainSearch} className="max-w-2xl mx-auto">
+              <div className="relative">
+                <input
+                  type="text"
+                  name="search"
+                  placeholder="Search sessions..."
+                  className="w-full p-3 pl-10 rounded-lg bg-gray-800 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <svg
+                  className="absolute left-3 top-3 h-5 w-5 text-gray-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                  />
+                </svg>
+              </div>
+              <button type="submit" className="hidden">
+                Search
+              </button>
+            </form>
+          </div>
+        </section>
 
         {/* Video Library Section */}
-        <section className="py-16 ">
+        <section className="py-16">
           <div className="container mx-auto px-4">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {filteredSessions.map((session) => (
                 <div
                   key={session.id}
-                  className="bg-gray-800 rounded-lg shadow-lg hover:shadow-xl transition-shadow transform hover:-translate-y-2 relative"
+                  className="bg-gray-800 rounded-lg shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-2 relative overflow-hidden"
                 >
                   {/* Live Badge */}
                   {session.isLive && (
@@ -130,8 +147,8 @@ export default function Landing() {
                     </div>
                   )}
 
-                  {/* Top Half: Opaque Blue Background */}
-                  <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-6 rounded-t-lg">
+                  {/* Top Half: Gradient Background */}
+                  <div className="bg-gradient-to-br from-blue-600 to-purple-600 p-6 rounded-t-lg">
                     <h3 className="text-2xl font-bold text-white">{session.title}</h3>
                     <span className="text-sm text-blue-200">{session.category}</span>
                   </div>
@@ -140,11 +157,37 @@ export default function Landing() {
                   <div className="p-6">
                     <div className="flex items-center gap-4 text-gray-400">
                       <div className="flex items-center gap-2">
-                        <span>👤</span>
+                        <svg
+                          className="h-5 w-5 text-gray-400"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                          xmlns="http://www.w3.org/2000/svg"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
+                          />
+                        </svg>
                         <span>{session.participants}</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span>⏰</span>
+                        <svg
+                          className="h-5 w-5 text-gray-400"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                          xmlns="http://www.w3.org/2000/svg"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                          />
+                        </svg>
                         <span>{session.duration}</span>
                       </div>
                     </div>
@@ -156,7 +199,7 @@ export default function Landing() {
         </section>
 
         {/* Footer */}
-     <Footer/>
+        <Footer />
       </div>
     </div>
   );

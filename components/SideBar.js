@@ -28,36 +28,88 @@ export default function SidebarChat() {
   };
 
   return (
-    <div className={` bg-gray-800 transition-all duration-300 ease-in-out ${isExpanded ? "w-64" : "w-16"}`}>
+    <div
+      className={`h-screen bg-gray-900/50 backdrop-blur-md border-r border-gray-800 transition-all duration-300 ${
+        isExpanded ? "w-64" : "w-16"
+      }`}
+    >
+      {/* Toggle Button */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full p-4 text-white hover:text-blue-500 focus:outline-none flex items-center justify-center"
+        className="w-full p-4 text-gray-400 hover:text-white transition-colors flex items-center justify-center"
       >
-        {isExpanded ? <span className="text-2xl">←</span> : <span className="text-2xl">→</span>}
+        {isExpanded ? (
+          <svg
+            className="h-6 w-6"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              d="M15 19l-7-7 7-7"
+            />
+          </svg>
+        ) : (
+          <svg
+            className="h-6 w-6"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              d="M9 5l7 7-7 7"
+            />
+          </svg>
+        )}
       </button>
 
+      {/* Sidebar Content */}
       {isExpanded && (
-        <div className="flex flex-col h-11/12">
+        <div className="flex flex-col h-full">
+          {/* Channels Section */}
           <div className="p-4 border-b border-gray-700">
-            <h2 className="text-lg font-semibold text-white">Channels</h2>
-            <ul className="mt-2 space-y-1">
+            <h2 className="text-lg font-bold text-white mb-4">Channels</h2>
+            <ul className="space-y-2">
               {["Homework", "Projects", "Exams"].map((channel) => (
                 <li key={channel}>
                   <button
                     onClick={() => setActiveChannel(channel)}
-                    className={`w-full text-left p-2 rounded-lg ${
-                      activeChannel === channel ? "bg-blue-600 text-white" : "text-gray-400 hover:bg-gray-700"
+                    className={`w-full p-2 rounded-lg text-gray-400 hover:bg-gray-800 hover:text-white transition-colors flex items-center gap-2 ${
+                      activeChannel === channel ? "bg-blue-600 text-white" : ""
                     }`}
                   >
-                    # {channel}
+                    <svg
+                      className="h-5 w-5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
+                      />
+                    </svg>
+                    <span>{channel}</span>
                   </button>
                 </li>
               ))}
             </ul>
           </div>
 
+          {/* Messages Section */}
           <div className="flex-1 p-4 overflow-y-auto">
-            <h3 className="text-lg font-semibold text-white">#{activeChannel}</h3>
+            <h3 className="text-lg font-bold text-white">#{activeChannel}</h3>
             <div className="mt-4 space-y-4">
               {messages[activeChannel].map((message) => (
                 <div key={message.id} className="flex items-start space-x-3">
@@ -73,6 +125,7 @@ export default function SidebarChat() {
             </div>
           </div>
 
+          {/* Message Input Section */}
           <div className="p-4 border-t border-gray-700">
             <div className="flex items-center space-x-2">
               <input

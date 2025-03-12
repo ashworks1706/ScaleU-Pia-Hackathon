@@ -18,12 +18,16 @@
     "@heroui/theme": "^2.4.12",
     "framer-motion": "^12.5.0",
     "next": "15.2.2",
+    "particles.js": "^2.0.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "react-tsparticles": "^1.43.1",
+    "tldraw": "^3.10.1"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
+    "@types/react": "^19.0.10",
     "concurrently": "^8.2.2",
     "eslint": "^9",
     "eslint-config-next": "15.2.2",
