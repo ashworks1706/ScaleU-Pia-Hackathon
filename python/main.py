@@ -132,7 +132,7 @@ def complete_session():
         # Build the payload update for the session with new status and video link
         payload = {
             "status": "completed",
-            "link":video_url,
+            "link":f"/video/{session_id}",
             "completed_at": int(time.time())
         }
 
@@ -444,7 +444,7 @@ def get_video_document(session_id):
         video = results[0]  # Unpack the first element
         return jsonify({
             "title": video.payload.get("title", ""),
-            "link": video.payload.get("link", ""),
+            "link": video.payload.get("video_url", ""),
             "transcript": video.payload.get("transcript", ""),
             "status": video.payload.get("status", "")
         }), 200
@@ -484,6 +484,58 @@ def get_leaderboard():
         return jsonify({"error": "Leaderboard fetch failed"}), 500
 
 
+@app.route('/python/upload-videos-batch', methods=['POST'])
+def upload_videos_batch():
+    try:
+        # Expecting a JSON array of video objects
+        videos = request.get_json()
+        if not isinstance(videos, list):
+            return jsonify({"error": "Expected a JSON array of videos"}), 400
+        
+        points = []
+        for video in videos:
+            # Verify that required fields are present
+            if "title" not in video:
+                continue  # Skip video if no title
+            
+            # Use provided id or generate a new one using uuid
+            vid = video.get("id", str(uuid.uuid4()))
+            
+            # Compute the vector from the video's title
+            vector = embedding_model.encode(video["title"]).tolist()
+            
+            # Build payload with supplied or default values
+            payload = {
+                "title": video.get("title"),
+                "category": video.get("category", ""),
+                "host_id": video.get("host_id", ""),
+                "transcript": video.get("transcript", ""),
+                "upvotes": video.get("upvotes", 0),
+                "status": video.get("status", "pending"),
+                "created_at": video.get("created_at", int(time.time())),
+                "participants": video.get("participants", 0),
+                "link": f'/videos/{str(uuid.uuid4())}',
+                "video_url": video.get("link",""),
+                "completed_at": video.get("completed_at")
+            }
+            
+            points.append(
+                rest_models.PointStruct(
+                    id=vid,
+                    vector=vector,
+                    payload=payload
+                )
+            )
+        
+        # Upsert the batch of video points into the "videos" collection
+        client.upsert(
+            collection_name="videos",
+            points=points
+        )
+        return jsonify({"status": "success", "uploaded": len(points)}), 200
+    except Exception as e:
+        logger.error(f"Batch upload failed: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 
 
