@@ -2,16 +2,16 @@ import React from "react";
 
 export default function Footer() {
   return (
-    <footer className="border-t border-gray-800 py-6 bg-gray-900/50 backdrop-blur-md">
-      <div className="container mx-auto px-4 text-center">
-        <p className="text-gray-400 text-sm">
+    <footer className="border-t border-neutral-700 py-6 mt-auto bg-black backdrop-blur-md">
+      <div className="container flex justify-center items-center gap-8 mx-auto px-4 text-center">
+        <p className="text-neutral-400 text-sm">
           &copy; {new Date().getFullYear()} GroupThink. All rights reserved.
         </p>
         {/* Optional: Add social media icons or links */}
         <div className="mt-2 flex justify-center space-x-4">
           <a
             href="#"
-            className="text-gray-400 hover:text-white transition-colors"
+            className="text-neutral-400 hover:text-white transition-colors"
           >
             <svg
               className="h-5 w-5"
@@ -24,7 +24,7 @@ export default function Footer() {
           </a>
           <a
             href="#"
-            className="text-gray-400 hover:text-white transition-colors"
+            className="text-neutral-400 hover:text-white transition-colors"
           >
             <svg
               className="h-5 w-5"

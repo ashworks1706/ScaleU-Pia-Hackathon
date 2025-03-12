@@ -49,10 +49,10 @@ export default function CreateSession() {
 
 
   return (
-    <div className="min-h-screen bg-gray-900">
+    <div className="min-h-screen bg-black">
       <NavbarSection />
-      <main className="container mx-auto py-12 px-4 max-w-2xl">
-        <h1 className="text-3xl font-bold text-white mb-8">Start New Session</h1>
+      <main className="container mx-auto mt-32 px-4 max-w-2xl">
+        <h1 className="text-3xl font-bold text-white mb-8 text-center">Start New Session</h1>
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
             <label className="block text-white mb-2">Session Title</label>
@@ -60,7 +60,8 @@ export default function CreateSession() {
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full p-3 rounded-lg bg-gray-800 text-white"
+              placeholder="Enter session title"
+              className="w-full p-3 rounded-lg bg-black border border-neutral-700 text-white"
               required
             />
           </div>
@@ -69,7 +70,7 @@ export default function CreateSession() {
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              className="w-full p-3 rounded-lg bg-gray-800 text-white"
+              className="w-full p-3 rounded-lg bg-black border border-neutral-700 text-white"
             >
               {['Math', 'Physics', 'Biology', 'Chemistry', 'Computer Science'].map(cat => (
                 <option key={cat} value={cat}>{cat}</option>
