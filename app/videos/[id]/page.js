@@ -57,7 +57,6 @@ export default function VideoView() {
               <iframe
                 className="w-full h-64 rounded-md"
                 src={`${youtubeId}`}
-                frameBorder="0"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
                 title="YouTube Video Player"
