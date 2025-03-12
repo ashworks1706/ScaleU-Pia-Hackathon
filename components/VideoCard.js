@@ -1,6 +1,8 @@
 // components/VideoCard.jsx
+
+
 const VideoCard = ({ title, relevant, upvotes, link, category }) => (
-  <div className="relative group border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden hover:shadow-lg transition-shadow">
+  <a href={link}  className=" cursor-pointer relative group border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden hover:shadow-lg transition-shadow">
     <div className="relative aspect-video bg-gray-100 dark:bg-gray-800">
       <video 
         className="w-full h-full object-cover"
@@ -35,7 +37,7 @@ const VideoCard = ({ title, relevant, upvotes, link, category }) => (
         {upvotes.toLocaleString()}
       </div>
     </div>
-  </div>
+  </a>
 );
 
 const VideoGrid = ({ videos }) => {
