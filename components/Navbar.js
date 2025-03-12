@@ -12,6 +12,7 @@ import {
   Button,
   Modal,
   ModalContent,
+  
   ModalHeader,
   ModalBody,
   ModalFooter,
@@ -131,16 +132,12 @@ export default function NavbarSection() {
 
   return (
     <>
-<<<<<<< HEAD
       {/* Navbar with Glassmorphism Effect */}
       <Navbar
         className="h-16 backdrop-blur-md bg-gray-900/50 border-b border-gray-800"
         onMenuOpenChange={setIsMenuOpen}
       >
-=======
-      <Navbar className=" h-16" onMenuOpenChange={setIsMenuOpen}>
->>>>>>> 23dc069338b3c9f1f456392cb8f5da10eb7fc083
-        <NavbarContent>
+      <NavbarContent>
           <NavbarMenuToggle
             aria-label={isMenuOpen ? "Close menu" : "Open menu"}
             className="sm:hidden text-white"

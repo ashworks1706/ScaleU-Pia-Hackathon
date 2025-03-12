@@ -237,28 +237,8 @@ function VideoSection() {
   return (
     <section id="videos" className="py-16 bg-gray-900">
       <div className="container mx-auto px-4">
-        <div className="text-center mb-12">
-          <h2 className="text-4xl font-bold mb-4 text-white">
-            See It in Action
-          </h2>
-          <p className="text-gray-400 text-lg">
-            Watch how GroupThink transforms your learning experience.
-          </p>
-        </div>
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.2 }}
-          className="aspect-video bg-gray-800 rounded-xl overflow-hidden shadow-xl"
-        >
-          <iframe
-            className="w-full h-full"
-            src="https://www.youtube.com/embed/dQw4w9WgXcQ"
-            title="YouTube video player"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-          ></iframe>
-        </motion.div>
+      
+       
       </div>
     </section>
   );
