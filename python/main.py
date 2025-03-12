@@ -15,6 +15,9 @@ from datetime import datetime
 from supabase import create_client
 from werkzeug.utils import secure_filename
 from pydantic import BaseModel
+from moviepy.audio.io.AudioFileClip import AudioFileClip
+from moviepy.video.io.VideoFileClip import VideoFileClip
+import speech_recognition as sr
 
 
 app = Flask(__name__)
@@ -203,30 +206,33 @@ def chunk_transcript(transcript: str, window_size: int = 2) -> list:
 # Update your backend recording endpoint
 @app.route('/python/recordings/<session_id>', methods=['POST'])
 def upload_recording(session_id):
-    if 'file' not in request.files:
-        return jsonify({"error": "No file provided"}), 400
-        
-    file = request.files['file']
     try:
-        path = f"recordings/{session_id}/{datetime.now().isoformat()}.webm"
-        file_content = file.read()
+        file = request.files['file']
+        temp_video = f"temp_{session_id}.webm"
+        file.save(temp_video)
         
-        res = supabase.storage() \
-            .from_("recordings") \
-            .upload(path, file_content, file.content_type)
+        # Process recording and get transcript
+        transcript = process_recording(temp_video, temp_video)  # Same file contains both
         
-        url = supabase.storage() \
-            .from_("recordings") \
-            .get_public_url(path)
-
+        # Update Qdrant with transcript
         client.set_payload(
             collection_name="videos",
-            ids=[session_id],
-            points=[session_id],  # Add this
-            payload={"link": url}
+            points=[session_id],
+            payload={
+                "transcript": transcript,
+                "status": "processed"
+            }
         )
         
-        return jsonify({"status": "success", "url": url}), 200
+        # Upload to Supabase
+        path = f"processed_{session_id}.webm"
+        with open(f"processed_{temp_video}", 'rb') as f:
+            res = supabase.storage().from_("recordings").upload(path, f)
+            
+        url = supabase.storage().from_("recordings").get_public_url(path)
+        
+        return jsonify({"url": url}), 200
+        
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -332,6 +338,39 @@ def enhanced_search():
         logger.error(f"Search failed: {str(e)}")
         return jsonify({"error": "Search operation failed"}), 500
 
+# Add CORS headers
+@app.after_request
+def add_cors_headers(response):
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization'
+    response.headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,DELETE,OPTIONS'
+    return response
+
+# Update process_recording
+def process_recording(video_path):
+    try:
+        video_clip = VideoFileClip(video_path)
+        audio_clip = video_clip.audio
+        final_clip = video_clip.set_audio(audio_clip)
+        
+        output_path = f"processed_{video_path}"
+        final_clip.write_videofile(output_path, codec='libvpx', audio_codec='libvorbis')
+        
+        # Generate transcript
+        r = sr.Recognizer()
+        with video_clip.audio.to_audiofile(f"temp_{video_path}.wav") as source:
+            audio = r.record(source)
+            transcript = r.recognize_google(audio)
+            
+        return transcript
+    except Exception as e:
+        logger.error(f"Processing error: {str(e)}")
+        raise
+
+
+
 if __name__ == '__main__':
     initialize()
     app.run(debug=True)
+
+

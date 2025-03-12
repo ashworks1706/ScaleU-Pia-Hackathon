@@ -45,7 +45,7 @@ const handleSearch = async (searchTerm, category) => {
       onSearch([], "");
       return;
     }
-    searchTimeout.current = setTimeout(() => handleSearch(term, category), 300);
+    searchTimeout.current = setTimeout(() => handleSearch(term, category), 700);
   };
 
   const handleChange = (e) => {
