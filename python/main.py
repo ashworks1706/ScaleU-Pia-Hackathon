@@ -314,6 +314,7 @@ def process_recording(video_path, audio_path):
     except Exception as e:
         logger.error(f"Merging failed: {str(e)}")
         raise
+@app.post("/python/process-transcript", methods=["POST"])
 # MODIFY process_transcript TO HANDLE INCREMENTAL UPDATES
 def process_transcript(audio_path: str) -> str:
     try:
@@ -352,10 +353,11 @@ def upload_recording(session_id):
             canvas_path = f"temp_{session_id}_canvas.webm"
             canvas_file.save(canvas_path)
             # Store canvas temporarily for later merge
-            supabase.storage().from_("temp_canvas").upload(
-                f"{session_id}.webm", 
-                open(canvas_path, 'rb')
-            )
+            supabase.storage.from_("temp_canvas").upload(
+    f"{session_id}.webm", 
+    open(canvas_path, 'rb')
+)
+
             os.remove(canvas_path)
 
         return jsonify({"status": "processed"}), 200
