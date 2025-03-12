@@ -47,7 +47,7 @@ export default function VideoView() {
   console.log(youtubeId)
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 text-white">
+    <div className="min-h-screen bg-black text-white">
       <NavbarSection />
       <div className="container mx-auto py-8">
         <h1 className="text-3xl font-bold mb-4">{video.title}</h1>

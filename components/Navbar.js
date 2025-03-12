@@ -75,7 +75,7 @@ const TrophyIcon = () => (
 const PlusIcon = () => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
-    className="h-5 w-5"
+    className="h-4 w-4"
     viewBox="0 0 20 20"
     fill="currentColor"
   >
@@ -133,7 +133,7 @@ export default function NavbarSection() {
     <>
       {/* Navbar with Glassmorphism Effect */}
       <Navbar
-        className="h-16 backdrop-blur-md bg-gray-900/50 border-b border-gray-800"
+        className="px-12 h-16 backdrop-blur-md bg-black border-b border-neutral-700"
         onMenuOpenChange={setIsMenuOpen}
       >
       <NavbarContent>
@@ -153,7 +153,7 @@ export default function NavbarSection() {
             <NavbarItem key={index}>
               <Link
                 href={item.href}
-                className="flex items-center gap-2 text-gray-300 hover:text-white transition-colors"
+                className="flex items-center gap-2 text-neutral-300 hover:text-white transition-colors"
               >
                 {item.icon}
                 <span>{item.name}</span>
@@ -166,26 +166,32 @@ export default function NavbarSection() {
         <NavbarContent justify="end">
           <NavbarItem>
             <Button
-
-              className="py-2 px-4 text-sm bg-gray-600 text-white rounded-3xl"
+              className="py-1 px-4 text-sm flex bg-blue-600 text-white rounded-3xl"
               color="foreground"
               onPress={()=> router.push("/create-session")}            >
               <PlusIcon className="h-4 w-4" />
               <span className="text-sm">Start Zoom</span>
             </Button>
           </NavbarItem>
-          <NavbarItem>
-            <UserButton />
+          <NavbarItem className="p-0 m-0">
+            <UserButton appearance={{
+              elements: {
+                avatarBox: {
+                  width: "36px",
+                  height: "36px",
+                },
+              },
+            }} />
           </NavbarItem>
         </NavbarContent>
 
         {/* Mobile Menu */}
-        <NavbarMenu className="backdrop-blur-md bg-gray-900/50">
+        <NavbarMenu className="backdrop-blur-md bg-neutral-900/50">
           {menuItems.map((item, index) => (
             <NavbarMenuItem key={index}>
               <Link
                 href={item.href}
-                className="w-full flex items-center gap-2 text-gray-300 hover:text-white transition-colors"
+                className="w-full flex items-center gap-2 text-neutral-300 hover:text-white transition-colors"
               >
                 {item.icon}
                 <span>{item.name}</span>
