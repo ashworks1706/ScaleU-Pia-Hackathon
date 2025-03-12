@@ -45,8 +45,8 @@ export default function Landing() {
       category: "Mathematics",
       participants: 12,
       duration: "45 mins",
-      professor: "Dr. Smith",
       isLive: true,
+      link:"",
     },
     {
       id: 2,
@@ -54,8 +54,7 @@ export default function Landing() {
       category: "Science",
       participants: 8,
       duration: "1 hour",
-      professor: "Dr. Johnson",
-      isLive: false,
+      isLive: false,link:"",
     },
     {
       id: 3,
@@ -63,8 +62,7 @@ export default function Landing() {
       category: "Computer Science",
       participants: 15,
       duration: "1.5 hours",
-      professor: "Dr. Brown",
-      isLive: true,
+      isLive: true,link:"",
     },
   ];
 
@@ -193,7 +191,6 @@ export default function Landing() {
                         <span>{session.duration}</span>
                       </div>
                     </div>
-                    <p className="text-gray-400 mt-4">Professor: {session.professor}</p>
                   </div>
                 </div>
               ))}
