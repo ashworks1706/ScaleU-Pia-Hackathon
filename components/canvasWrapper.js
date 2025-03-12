@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable react/display-name */
 import { forwardRef, useImperativeHandle, useEffect, useState, useRef } from "react";
 
@@ -145,7 +146,7 @@ const CanvasWrapper = forwardRef(({ initialData, onChange, onReady }, ref) => {
     });
   };
   
-  const clearCanvas = () => {
+  const clearCanvas = useCallback(() => {
     const ctx = contextRef.current;
     if (!ctx) return;
     
@@ -158,7 +159,7 @@ const CanvasWrapper = forwardRef(({ initialData, onChange, onReady }, ref) => {
     if (onChange) {
       onChange(recordedDrawActions.current);
     }
-  };
+  });
   
   // Handle touch events for mobile
   const handleTouchStart = (e) => {

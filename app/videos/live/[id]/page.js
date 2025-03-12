@@ -48,7 +48,7 @@ function useDebounce(callback, delay) {
 
 export default function LiveSession() {
   const combinedRecorderRef = useRef(null);
-  const excalidrawRef = useRef(null);
+  const drawRef = useRef(null);
 
   const [recordingStatus, setRecordingStatus] = useState("recording");
   const { userId } = useAuth();
@@ -79,7 +79,7 @@ export default function LiveSession() {
   const channelRef = useRef(null);
   const pieSocketRef = useRef(null);
   const [wsConnected, setWsConnected] = useState(false);
-
+const [finalVideoURL, setFinalVideoURL] = useState("")
   // Initialize PieSocket connection and subscribe to the session channel
   useEffect(() => {
     if (!id) return;
@@ -169,12 +169,12 @@ export default function LiveSession() {
 
   // Setup canvas recording logic (unchanged from before)
   const setupCanvasRecording = useCallback(() => {
-    if (!excalidrawRef?.current || !whiteboardReady) {
+    if (!drawRef?.current || !whiteboardReady) {
       console.log("Whiteboard not ready yet, delaying canvas recording setup");
       return { canvasRecorder: null, audioRecorder: null };
     }
     try {
-      const canvas = excalidrawRef.current.getCanvas();
+      const canvas = drawRef.current.getCanvas();
       if (!canvas) {
         console.error("Canvas element not found");
         return { canvasRecorder: null, audioRecorder: null };
@@ -189,6 +189,7 @@ export default function LiveSession() {
       let canvasStream;
       try {
         canvasStream = canvas.captureStream(30);
+        console.log("Canvas stream created")
         if (!canvasStream) {
           throw new Error("Failed to capture canvas stream");
         }
@@ -209,8 +210,10 @@ export default function LiveSession() {
         });
         canvasChunks.push(e.data);
         canvasChunks.push(syncChunk);
+        console.log("pushde canvas chunks")
       };
       canvasRecorder.onstop = async () => {
+        console.log("onstop canvas chunks")
         const canvasBlob = new Blob(canvasChunks, { type: "video/webm" });
         await uploadRecording(canvasBlob, "canvas");
       };
@@ -273,6 +276,7 @@ export default function LiveSession() {
           method: "POST",
           body: formData,
         });
+        setFinalVideoURL(response.json().video_url)
         if (!response.ok) {
           const errorText = await response.text();
           throw new Error(
@@ -432,21 +436,12 @@ export default function LiveSession() {
       if (mediaRecorder.current?.state === "recording") {
         mediaRecorder.current.stop();
       }
-      const sessionRes = await fetch(`/python/sessions/${id}`);
-      const { transcript } = await sessionRes.json();
-      await fetch("/python/process-transcript", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          session_id: id,
-          transcript: transcript,
-        }),
-      });
       await fetch("/python/complete-session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           session_id: id,
+          video_url: finalVideoURL,
         }),
       });
       router.push("/");
@@ -524,7 +519,7 @@ export default function LiveSession() {
                 )}
                 {/* <div className="flex w-full text-sm text-center "> */}
                 <Whiteboard
-                  ref={excalidrawRef}
+                  ref={drawRef}
                   initialData={whiteboardData}
                   onChange={handleWhiteboardChange}
                   onReady={() => {

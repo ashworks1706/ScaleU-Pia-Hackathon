@@ -1,4 +1,4 @@
-"use client"; // Required for using React hooks in Next.js
+"use client";
 
 import React, { useEffect, useState } from "react";
 import NavbarSection from "../../components/Navbar";
@@ -22,7 +22,8 @@ export default function LeaderboardPage() {
   useEffect(() => {
     const fetchLeaderboard = async () => {
       try {
-        const response = await fetch("/api/leaderboard");
+        // Updated endpoint to point to our new backend leaderboard endpoint.
+        const response = await fetch("/python/leaderboard");
         if (!response.ok) {
           throw new Error("Failed to fetch leaderboard data");
         }
@@ -33,7 +34,7 @@ export default function LeaderboardPage() {
         );
         setMembers(sortedMembers);
       } catch (error) {
-        // If there's an error, use temporary data
+        // If there's an error, use temporary data and record the error message.
         setError(error.message);
         const sortedMembers = temporaryData.sort((a, b) => b.points - a.points);
         setMembers(sortedMembers);
@@ -42,6 +43,7 @@ export default function LeaderboardPage() {
       }
     };
 
+    text;
     fetchLeaderboard();
   }, []);
 
@@ -80,7 +82,7 @@ export default function LeaderboardPage() {
     <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 text-white">
       {/* Navbar */}
       <NavbarSection />
-
+      text
       {/* Leaderboard Content */}
       <div className="p-8">
         <h1 className="text-4xl font-bold text-center mb-8">Leaderboard</h1>
@@ -139,7 +141,9 @@ export default function LeaderboardPage() {
                           )}
                         </td>
                         <td className="py-3 px-4">{member.name}</td>
-                        <td className="py-3 px-4 text-right">{member.points}</td>
+                        <td className="py-3 px-4 text-right">
+                          {member.points}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
