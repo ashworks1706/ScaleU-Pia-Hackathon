@@ -134,7 +134,7 @@ def complete_session():
         # Build the payload update for the session with new status and video link
         payload = {
             "status": "completed",
-            "link":f"/video/{session_id}",
+            "link":f"/videos/{session_id}",
             "completed_at": int(time.time())
         }
 
@@ -346,28 +346,31 @@ def upload_recording(session_id):
         canvas_file = request.files.get('canvas')
         audio_file = request.files.get('audio')
         video_url = None
-
         if audio_file:
             audio_path = f"temp_{session_id}.webm"
             audio_file.save(audio_path)
             transcript = process_transcript(audio_path)
             os.remove(audio_path)
-            # Unpack tuple to access payload
+            # Retrieve the document to update its transcript.
             results = client.retrieve(
                 collection_name="videos",
                 ids=[session_id],
                 with_payload=True
             )
-            current = results.payload.get("transcript", "")
-            client.set_payload(
-                collection_name="videos",
-                points=[session_id],
-                payload={"transcript": f"{current}\n{transcript}"}
-            )
+            if results and len(results) > 0:
+                video_record = results  # Unpack the first element.
+                current = video_record.payload.get("transcript", "")
+                # Update the transcript field by appending the new transcript.
+                client.set_payload(
+                    collection_name="videos",
+                    points=[session_id],
+                    payload={"transcript": f"{current}\n{transcript}"}
+                )
 
         if canvas_file:
             canvas_path = f"temp_{session_id}_canvas.webm"
             canvas_file.save(canvas_path)
+            # Upload the file to Supabase.
             supabase.storage.from_("temp_canvas").upload(
                 f"{session_id}.webm", 
                 open(canvas_path, 'rb')
@@ -375,8 +378,16 @@ def upload_recording(session_id):
             os.remove(canvas_path)
             public_url = supabase.storage.from_("temp_canvas").get_public_url(f"{session_id}.webm")
             video_url = public_url
+            # Update the document to add the video_url attribute.
+            client.set_payload(
+                collection_name="videos",
+                points=[session_id],
+                payload={"video_url": video_url}
+            )
 
         return jsonify({"status": "processed", "video_url": video_url}), 200
+
+
 
     except Exception as e:
         logger.error(f"Recording error: {str(e)}")
@@ -435,39 +446,43 @@ def incremental_transcript(session_id):
 @app.route('/python/video/<session_id>', methods=['GET'])
 def get_video_document(session_id):
     try:
-        # First, try to retrieve the document by its id.
+        # First, try to retrieve the document by its ID.
         results = client.retrieve(
-        collection_name="videos",
-        ids=[session_id],
-        with_payload=True
+            collection_name="videos",
+            ids=[session_id],
+            with_payload=True
         )
+        # Check if the document exists
         if results and len(results) > 0:
-            video = results # Unpack the first element.
-            return jsonify({
-            "title": video.payload.get("title", ""),
-            "link": video.payload.get("video_url", ""),
-            "transcript": video.payload.get("transcript", ""),
-            "status": video.payload.get("status", "")
-            }), 200
+            video = results[0]
+            # If the document's link is present, return it immediately.
+            if video.payload.get("link", ""):
+                return jsonify({
+                    "title": video.payload.get("title", ""),
+                    "link": video.payload.get("video_url", ""),
+                    "transcript": video.payload.get("transcript", ""),
+                    "status": video.payload.get("status", "")
+                }), 200
 
-        # If the first method fails, search for a document whose video_url (link) matches "/vidio/{session_id}".
-        filter_obj = Filter(
+        # If retrieval by ID fails or the link field is empty,
+        # then use scroll to look for a document whose link field matches "/vidio/{session_id}".
+        alt_filter = rest_models.Filter(
             must=[
-                FieldCondition(
-                    key="video_url",
-                    match=MatchValue(value=f"/videos/{session_id}")
+                rest_models.FieldCondition(
+                    key="link",
+                    match=rest_models.MatchValue(value=f"/videos/{session_id}")
                 )
             ]
         )
-        # Use scroll to find matching docs. You can adjust limit as needed.
-        results2, _ = client.scroll(
+        # Use scroll_filter (not query_filter) with the constructed filter.
+        alt_results, _ = client.scroll(
             collection_name="videos",
             with_payload=True,
-            query_filter=filter_obj,
+            scroll_filter=alt_filter,
             limit=1
         )
-        if results2 and len(results2) > 0:
-            video = results2
+        if alt_results and len(alt_results) > 0:
+            video = alt_results[0]
             return jsonify({
                 "title": video.payload.get("title", ""),
                 "link": video.payload.get("video_url", ""),
@@ -475,13 +490,12 @@ def get_video_document(session_id):
                 "status": video.payload.get("status", "")
             }), 200
 
-        # If no matching document is found, return an error.
+        # If no document is found using either approach, return a 404 error.
         return jsonify({"error": "Video not found"}), 404
 
     except Exception as e:
         logger.error(f"Video fetch failed: {str(e)}")
         return jsonify({"error": "Video fetch failed"}), 500
-
 
 
 @app.route('/python/leaderboard', methods=['GET'])

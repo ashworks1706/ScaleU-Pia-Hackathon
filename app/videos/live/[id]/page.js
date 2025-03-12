@@ -278,8 +278,6 @@ const [finalVideoURL, setFinalVideoURL] = useState("")
           body: formData,
         });
         console.log("Recordings data response")
-        console.log(response.json())
-        setFinalVideoURL(response.json().video_url)
         if (!response.ok) {
           const errorText = await response.text();
           throw new Error(
