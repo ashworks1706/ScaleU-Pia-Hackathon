@@ -442,6 +442,13 @@ export default function LiveSession() {
           transcript: transcript,
         }),
       });
+      await fetch("/python/complete-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: id,
+        }),
+      });
       router.push("/");
     } catch (error) {
       console.error("Session closure failed:", error);
