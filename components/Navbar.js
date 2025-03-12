@@ -1,4 +1,6 @@
-import React from "react";
+// components/Navbar.jsx
+'use client'
+import React, { useState } from "react";
 import {
   Navbar,
   NavbarBrand,
@@ -9,9 +11,16 @@ import {
   NavbarMenuItem,
   Link,
   Button,
+  Modal,
+  ModalContent,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  Input,
 } from "@heroui/react";
-import {UserButton, UserProfile
-} from "@clerk/nextjs";
+import { UserButton } from "@clerk/nextjs";
+import { useRouter } from "next/navigation";
+
 export const AcmeLogo = () => {
   return (
     <svg fill="none" height="36" viewBox="0 0 32 32" width="36">
@@ -26,74 +35,141 @@ export const AcmeLogo = () => {
 };
 
 export default function NavbarSection() {
-  const [isMenuOpen, setIsMenuOpen] = React.useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [sessionTitle, setSessionTitle] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
 
-  const menuItems = [
-    "Profile",
-    "Dashboard",
-    "Activity",
-    "Analytics",
-    "System",
-    "Deployments",
-    "My Settings",
-    "Team Settings",
-    "Help & Feedback",
-    "Log Out",
-  ];
+  const menuItems = ["Home", "Videos", "Activity", "Leaderboard"];
+
+  const handleStartZoom = async () => {
+    if (!sessionTitle.trim()) return;
+    
+    try {
+      setIsLoading(true);
+      const response = await fetch("/api/create-zoom-session", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title: sessionTitle,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to create Zoom session", response);
+      }
+
+      const data = await response.json();
+      
+      // Redirect to the session page with the session ID
+      router.push(`/session/${data.session_id}?join=${data.join_url}`);
+      
+    } catch (error) {
+      console.error("Error creating Zoom session:", error);
+      alert("Failed to create Zoom session. Please try again.");
+    } finally {
+      setIsLoading(false);
+      setIsModalOpen(false);
+    }
+  };
 
   return (
-    <Navbar className="bg-black h-16" onMenuOpenChange={setIsMenuOpen}>
-      <NavbarContent>
-        <NavbarMenuToggle
-          aria-label={isMenuOpen ? "Close menu" : "Open menu"}
-          className="sm:hidden "
-        />
-        <NavbarBrand>
-          <AcmeLogo />
-          <p className="font-bold text-inherit">GroupThink</p>
-        </NavbarBrand>
-      </NavbarContent>
+    <>
+      <Navbar className="bg-black h-16" onMenuOpenChange={setIsMenuOpen}>
+        <NavbarContent>
+          <NavbarMenuToggle
+            aria-label={isMenuOpen ? "Close menu" : "Open menu"}
+            className="sm:hidden "
+          />
+          <NavbarBrand>
+            <AcmeLogo />
+            <p className="font-bold text-inherit">GroupThink</p>
+          </NavbarBrand>
+        </NavbarContent>
 
-      <NavbarContent className="hidden sm:flex gap-4" justify="center">
-        <NavbarItem>
-          <Link color="foreground" href="/">
-            Home
-          </Link>
-        </NavbarItem>
-        <NavbarItem isActive>
-          <Link aria-current="page" href="/videos">
-            Videos 
-          </Link>
-        </NavbarItem>
-        <NavbarItem>
-          <Link color="foreground" href="/leaderboard">
-            Leaderboard
-          </Link>
-        </NavbarItem>
-      </NavbarContent>
-      <NavbarContent justify="end">
-        <NavbarItem className="hidden lg:flex">
-         <UserButton/>
-        </NavbarItem>
-       
-      </NavbarContent>
-      <NavbarMenu>
-        {menuItems.map((item, index) => (
-          <NavbarMenuItem key={`${item}-${index}`}>
-            <Link
-              className="w-full"
-              color={
-                index === 2 ? "primary" : index === menuItems.length - 1 ? "danger" : "foreground"
-              }
-              href="#"
-              size="lg"
-            >
-              {item}
+        <NavbarContent className="hidden sm:flex gap-4" justify="center">
+          <NavbarItem>
+            <Link color="foreground" href="/">
+              Home
             </Link>
-          </NavbarMenuItem>
-        ))}
-      </NavbarMenu>
-    </Navbar>
+          </NavbarItem>
+          <NavbarItem isActive>
+            <Link aria-current="page" href="/videos">
+              Videos
+            </Link>
+          </NavbarItem>
+          <NavbarItem>
+            <Link color="foreground" href="/leaderboard">
+              Leaderboard
+            </Link>
+          </NavbarItem>
+        </NavbarContent>
+        
+        <NavbarContent justify="end">
+          <NavbarItem>
+            <Button
+              className="py-2 px-4 text-sm bg-gray-600 text-white rounded-3xl"
+              color="foreground"
+              onClick={() => setIsModalOpen(true)}
+            >
+              + Start Zoom
+            </Button>
+          </NavbarItem>
+          <NavbarItem className="hidden lg:flex">
+            <UserButton />
+          </NavbarItem>
+        </NavbarContent>
+        
+        <NavbarMenu>
+          {menuItems.map((item, index) => (
+            <NavbarMenuItem key={`${item}-${index}`}>
+              <Link
+                className="w-full"
+                color={
+                  index === 2
+                    ? "primary"
+                    : index === menuItems.length - 1
+                    ? "danger"
+                    : "foreground"
+                }
+                href="#"
+                size="lg"
+              >
+                {item}
+              </Link>
+            </NavbarMenuItem>
+          ))}
+        </NavbarMenu>
+      </Navbar>
+
+      <Modal className="w-full min-h-screen items-center justify-center backdrop-blur-lg bg-gray-800 p-4 space-y-24  " isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
+        <ModalContent>
+          <ModalHeader>Start a New Session</ModalHeader>
+          <ModalBody>
+            <Input
+              placeholder="Enter a title for your session"
+              value={sessionTitle}
+              onChange={(e) => setSessionTitle(e.target.value)}
+              fullWidth
+            />
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              color="primary"
+              onClick={handleStartZoom}
+              disabled={isLoading || !sessionTitle.trim()}
+            >
+              {isLoading ? "Creating..." : "Start Session"}
+            </Button>
+            <Button color="neutral" onClick={() => setIsModalOpen(false)}>
+              Cancel
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+    </>
   );
 }
-

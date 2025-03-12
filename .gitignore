@@ -44,3 +44,4 @@ venv
 # clerk configuration (can include secrets)
 /.clerk/
 python/venv
+python/__pycache__
