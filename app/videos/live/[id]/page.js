@@ -272,11 +272,12 @@ const [finalVideoURL, setFinalVideoURL] = useState("")
       formData.append(type, blob, `${id}_${type}.webm`);
       // For canvas recordings, send to the dedicated backend endpoint
       if (type === "canvas") {
+        console.log(" Posting recordings data ")
         const response = await fetch(`/python/recordings/${id}`, {
           method: "POST",
           body: formData,
         });
-        setFinalVideoURL(response.json().video_url)
+        console.log("Recordings data response")
         if (!response.ok) {
           const errorText = await response.text();
           throw new Error(
@@ -375,9 +376,11 @@ const [finalVideoURL, setFinalVideoURL] = useState("")
   }, 500);
 
   // Send chat message using PieSocket publish
-  const sendMessage = () => {
+  const sendMessage = async () => {
     if (!inputMessage.trim()) return;
-    const message = {
+    
+    // Create user message
+    const userMessage = {
       type: "chat",
       payload: {
         user: userId,
@@ -385,12 +388,61 @@ const [finalVideoURL, setFinalVideoURL] = useState("")
         timestamp: Date.now(),
       },
     };
+    
+    // Send user message
     if (wsConnected) {
-      send(message);
+      send(userMessage);
+      
+      // Check if message contains standalone @AI
+      const aiMatch = inputMessage.match(/(\s|^)@AI(\s|$)/);
+      if (aiMatch) {
+        try {
+          // Extract the query (everything after the @AI token)
+          const startIndex = aiMatch.index + aiMatch[0].length;
+          const query = inputMessage.substring(startIndex).trim();
+          
+          // Send request to AI API
+          const response = await fetch(`https://crawl-canvas.vercel.app/resources?query=${encodeURIComponent(query)}`);
+          
+          if (!response.ok) {
+            throw new Error("AI response failed");
+          }
+          
+          const aiData = await response.json();
+          
+          // Create AI response message
+          const aiMessage = {
+            type: "chat",
+            payload: {
+              user: "AI Assistant",
+              text: aiData.response || "Sorry, I couldn't find an answer to your question.",
+              timestamp: Date.now(),
+            },
+          };
+          
+          // Send AI response to channel
+          send(aiMessage);
+        } catch (error) {
+          console.error("AI response error:", error);
+          
+          // Send error message to chat
+          const errorMessage = {
+            type: "chat",
+            payload: {
+              user: "AI Assistant",
+              text: "Sorry, I encountered an error while processing your request.",
+              timestamp: Date.now(),
+            },
+          };
+          
+          send(errorMessage);
+        }
+      }
+      
       setInputMessage("");
     } else {
       setConnectionError("Cannot send message: WebSocket disconnected");
-      pendingChanges.current.push(message);
+      pendingChanges.current.push(userMessage);
     }
   };
 
