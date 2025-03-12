@@ -110,9 +110,10 @@ def get_session(session_id):
             return jsonify({"error": "Session not found"}), 404
             
         return jsonify({
-            "host_id": result[0].payload.get("host_id"),
-            "title": result[0].payload.get("title"),
-            "status": result[0].payload.get("status")
+            "host_id": result.payload.get("host_id"),
+            "title": result.payload.get("title"),
+            "status": result.payload.get("status"),
+            "link": result.payload.get("link")
         }), 200
         
     except Exception as e:
@@ -124,25 +125,28 @@ def complete_session():
     try:
         data = request.get_json()
         session_id = data['session_id']
-        
-        # Mark session as completed
+        video_url = data.get("video_url") 
+        # Create the payload update for the session
+        payload = {
+            "status": "completed",
+            "completed_at": int(time.time())
+        }
+        if video_url:
+            payload["link"] = video_url  # Update the video link
+
+        # Mark session as completed and update the payload
         client.set_payload(
             collection_name="videos",
             points=[session_id],
-            payload={
-                "status": "completed",
-                "completed_at": int(time.time())
-            }
+            payload=payload
         )
-        
-        # Clear active transcript updates
-        # Add Redis or database flag if using persistent storage
         
         return jsonify({"status": "success"}), 200
 
     except Exception as e:
         logger.error(f"Session completion failed: {str(e)}")
         return jsonify({"error": str(e)}), 500
+
 
 def process_transcript_chunks(session_id: str, transcript: str):
     try:
@@ -314,7 +318,7 @@ def process_recording(video_path, audio_path):
     except Exception as e:
         logger.error(f"Merging failed: {str(e)}")
         raise
-@app.post("/python/process-transcript", methods=["POST"])
+@app.route("/python/process-transcript", methods=["POST"])
 # MODIFY process_transcript TO HANDLE INCREMENTAL UPDATES
 def process_transcript(audio_path: str) -> str:
     try:
@@ -334,37 +338,41 @@ def upload_recording(session_id):
         audio_file = request.files.get('audio')
         
         # Immediately process audio for transcript
+        # Process audio for transcript immediately (unchanged)
         if audio_file:
             audio_path = f"temp_{session_id}.webm"
             audio_file.save(audio_path)
-            transcript = process_transcript(audio_path)  # Use existing function
+            transcript = process_transcript(audio_path)  # Use your existing transcription function
             os.remove(audio_path)
-            
+
             # Update transcript incrementally
-            current = client.retrieve("videos", [session_id])[0].payload.get("transcript", "")
+            current = client.retrieve("videos", [session_id]).payload.get("transcript", "")
             client.set_payload(
                 collection_name="videos",
                 points=[session_id],
                 payload={"transcript": f"{current}\n{transcript}"}
             )
 
-        # Handle canvas separately
+        # Handle canvas file
         if canvas_file:
             canvas_path = f"temp_{session_id}_canvas.webm"
             canvas_file.save(canvas_path)
-            # Store canvas temporarily for later merge
             supabase.storage.from_("temp_canvas").upload(
-    f"{session_id}.webm", 
-    open(canvas_path, 'rb')
-)
-
+                f"{session_id}.webm", 
+                open(canvas_path, 'rb')
+            )
             os.remove(canvas_path)
+            
+            # Get a public URL for the uploaded file
+            public_url = supabase.storage.from_("temp_canvas").get_public_url(f"{session_id}.webm")
+            video_url = public_url  # Save the URL to pass on
 
-        return jsonify({"status": "processed"}), 200
+        return jsonify({"status": "processed", "video_url": video_url}), 200
 
     except Exception as e:
         logger.error(f"Recording error: {str(e)}")
         return jsonify({"error": str(e)}), 500
+
 
 def merge_recordings(canvas_path, audio_path):
     try:
