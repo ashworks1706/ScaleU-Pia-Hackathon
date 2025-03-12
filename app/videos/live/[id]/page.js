@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import NavbarSection from "../../../../components/Navbar";
 import dynamic from "next/dynamic";
+import PieSocket from "piesocket-js";
 import {
   Button,
   Input,
@@ -19,20 +20,15 @@ import {
   Badge,
   Tooltip,
 } from "@heroui/react";
-// import { Excalidraw as Whiteboard }  from "@excalidraw/excalidraw";
 
 const Whiteboard = dynamic(
-  async () =>
-    (await import("../../../../components/excalidrawWrapper")).default,
-  {
-    ssr: false,
-  }
+  async () => (await import("../../../../components/canvasWrapper")).default,
+  { ssr: false }
 );
 
 // Debounce hook for whiteboard changes
 function useDebounce(callback, delay) {
   const timeoutRef = useRef(null);
-
   useEffect(() => {
     return () => {
       if (timeoutRef.current) {
@@ -40,7 +36,6 @@ function useDebounce(callback, delay) {
       }
     };
   }, []);
-
   return (...args) => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
@@ -72,28 +67,118 @@ export default function LiveSession() {
   const [whiteboardData, setWhiteboardData] = useState(null);
   const [poll, setPoll] = useState(null);
   const [votes, setVotes] = useState({});
-  const ws = useRef(null);
-  const [wsConnected, setWsConnected] = useState(false);
+  const [whiteboardReady, setWhiteboardReady] = useState(false);
+  const audioStreamRef = useRef(null);
   const [connectionError, setConnectionError] = useState(null);
   const mediaRecorder = useRef(null);
   const [isHost, setIsHost] = useState(false);
-  const reconnectAttempts = useRef(0);
-  const maxReconnectAttempts = 5;
   const pendingChanges = useRef([]);
-  // LiveSession.jsx (Frontend) - Critical Modifications
-const setupCanvasRecording = () => {
-    if (!excalidrawRef.current) {
-        console.error("Excalidraw ref not available");
-        return;
+  let lastTranscriptUpdate = 0;
+
+  // Use PieSocket JS – hold both the channel and the PieSocket instance
+  const channelRef = useRef(null);
+  const pieSocketRef = useRef(null);
+  const [wsConnected, setWsConnected] = useState(false);
+
+  // Initialize PieSocket connection and subscribe to the session channel
+  useEffect(() => {
+    if (!id) return;
+    const pieSocket = new PieSocket({
+      clusterId: "s14271.nyc1",
+      apiKey: "uOkCOHkUVs4zhG89vWqp2CnM9i7dKdrbtG1Z3Lqw",
+      notifySelf: true,
+    });
+    // Save the PieSocket instance so we can later unsubscribe
+    pieSocketRef.current = pieSocket;
+    pieSocket
+      .subscribe(`session-${id}`)
+      .then((channel) => {
+        channelRef.current = channel;
+        setWsConnected(true);
+        setConnectionError(null);
+        // Process any pending messages
+        while (pendingChanges.current.length > 0) {
+          const message = pendingChanges.current.shift();
+          channel.publish(message.type, message.payload);
+        }
+        // Set up event listeners
+        channel.listen("chat", (data) => {
+          setMessages((prev) => [...prev, data]);
+        });
+        channel.listen("whiteboard", (data) => {
+          setWhiteboardData(data);
+        });
+        channel.listen("participants", (data) => {
+          setParticipants(data.users);
+        });
+        channel.listen("poll", (data) => {
+          setPoll(data.question);
+        });
+        channel.listen("vote", (data) => {
+          setVotes((prev) => ({ ...prev, [data.userId]: data.vote }));
+        });
+        channel.listen("close", () => {
+          handleSessionClose();
+        });
+        channel.listen("recording", (data) => {
+          setMediaState((prev) => ({
+            ...prev,
+            isRecording: data.is_recording,
+            lastSaved: data.timestamp,
+          }));
+        });
+        channel.listen("ping", () => {
+          // Respond with pong if necessary
+          channel.publish("pong", {});
+        });
+        // Send join message as soon as the channel is ready
+        channel.publish("join", { userId });
+      })
+      .catch((err) => {
+        console.error("PieSocket connection error:", err);
+        setConnectionError("Connection error: " + err.message);
+        setWsConnected(false);
+      });
+    // On cleanup, unsubscribe from the channel using the PieSocket instance
+    return () => {
+      if (pieSocketRef.current) {
+        pieSocketRef.current.unsubscribe(`session-${id}`);
       }
-    
+    };
+  }, [id, userId]);
+
+  // Send function using PieSocket channel publish
+  const send = useCallback((message) => {
+    if (!channelRef.current) {
+      pendingChanges.current.push(message);
+      return false;
+    }
+    channelRef.current.publish(message.type, message.payload);
+    return true;
+  }, []);
+
+  // Process any pending messages when connected
+  useEffect(() => {
+    if (wsConnected && pendingChanges.current.length > 0 && channelRef.current) {
+      while (pendingChanges.current.length > 0) {
+        const message = pendingChanges.current.shift();
+        channelRef.current.publish(message.type, message.payload);
+      }
+    }
+  }, [wsConnected]);
+
+  // Setup canvas recording logic (unchanged from before)
+  const setupCanvasRecording = useCallback(() => {
+    if (!excalidrawRef?.current || !whiteboardReady) {
+      console.log("Whiteboard not ready yet, delaying canvas recording setup");
+      return { canvasRecorder: null, audioRecorder: null };
+    }
+    try {
       const canvas = excalidrawRef.current.getCanvas();
       if (!canvas) {
         console.error("Canvas element not found");
-        return;
+        return { canvasRecorder: null, audioRecorder: null };
       }
-    
-      // Add timestamp synchronization
       let lastFrameTime = Date.now();
       const syncTimestamps = () => {
         const now = Date.now();
@@ -101,279 +186,166 @@ const setupCanvasRecording = () => {
         lastFrameTime = now;
         return timeDiff;
       };
-    
-      const canvasStream = canvas.captureStream(30);
+      let canvasStream;
+      try {
+        canvasStream = canvas.captureStream(30);
+        if (!canvasStream) {
+          throw new Error("Failed to capture canvas stream");
+        }
+      } catch (err) {
+        console.error("Canvas stream error:", err);
+        return { canvasRecorder: null, audioRecorder: null };
+      }
       const canvasRecorder = new MediaRecorder(canvasStream, {
-        mimeType: 'video/webm;codecs=vp9',
-        videoBitsPerSecond: 2500000
+        mimeType: "video/webm;codecs=vp9",
+        videoBitsPerSecond: 2500000,
       });
-    
-      // Add frame metadata
       const canvasChunks = [];
       canvasRecorder.ondataavailable = (e) => {
         const syncData = new DataView(new ArrayBuffer(4));
         syncData.setUint32(0, syncTimestamps());
-        const syncChunk = new Blob([syncData], {type: 'application/octet-stream'});
-        
+        const syncChunk = new Blob([syncData], {
+          type: "application/octet-stream",
+        });
         canvasChunks.push(e.data);
         canvasChunks.push(syncChunk);
       };
-    
-    canvasRecorder.onstop = async () => {
-      const canvasBlob = new Blob(canvasChunks, { type: 'video/webm' });
-      await uploadRecording(canvasBlob, 'canvas');
-    };
-  
-    // Audio recorder setup (modified)
-    const audioRecorder = new MediaRecorder(audioStream);
-    const audioChunks = [];
-    audioRecorder.ondataavailable = (e) => {
-      audioChunks.push(e.data);
-      // Send audio chunk every 60s for transcription
-      if (Date.now() - lastTranscriptUpdate > 60000) {
-        const chunk = new Blob([e.data], {type: 'audio/webm'});
-        updateTranscript(chunk);
-        lastTranscriptUpdate = Date.now();
+      canvasRecorder.onstop = async () => {
+        const canvasBlob = new Blob(canvasChunks, { type: "video/webm" });
+        await uploadRecording(canvasBlob, "canvas");
+      };
+      let audioRecorder = null;
+      if (audioStreamRef.current) {
+        audioRecorder = new MediaRecorder(audioStreamRef.current);
+        const audioChunks = [];
+        audioRecorder.ondataavailable = (e) => {
+          audioChunks.push(e.data);
+          if (Date.now() - lastTranscriptUpdate > 60000) {
+            const chunk = new Blob([e.data], { type: "audio/webm" });
+            updateTranscript(chunk);
+            lastTranscriptUpdate = Date.now();
+          }
+        };
+        audioRecorder.onstop = async () => {
+          const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
+          await uploadRecording(audioBlob, "audio");
+        };
+        audioRecorder.start(1000);
+      } else {
+        console.warn("Audio stream not available for recording");
+      }
+      canvasRecorder.start(1000);
+      return { canvasRecorder, audioRecorder };
+    } catch (error) {
+      console.error("Setup canvas recording error:", error);
+      return { canvasRecorder: null, audioRecorder: null };
+    }
+  }, [whiteboardReady]);
+
+  // Initialize media recording when whiteboard is ready
+  useEffect(() => {
+    if (!whiteboardReady) return;
+    const initMedia = async () => {
+      try {
+        const { canvasRecorder, audioRecorder } = setupCanvasRecording();
+        if (canvasRecorder) {
+          combinedRecorderRef.current = {
+            canvas: canvasRecorder,
+            audio: audioRecorder,
+          };
+          console.log("Recording successfully initialized");
+        }
+      } catch (error) {
+        console.error("Media initialization error:", error);
       }
     };
-  
-    // Start both recorders
-    canvasRecorder.start(1000); // 1s chunks for smoother recording
-    audioRecorder.start(1000);
-    
-    return { canvasRecorder, audioRecorder };
-  };
-  
-  // Add to media initialization
-  useEffect(() => {
-    const initMedia = async () => {
-      const { canvasRecorder, audioRecorder } = setupCanvasRecording();
-      
-      combinedRecorderRef.current = {
-        canvas: canvasRecorder,
-        audio: audioRecorder
-      };
-    };
     initMedia();
-  }, []);
-  
-  // Modified upload function
+  }, [whiteboardReady, setupCanvasRecording]);
+
+  // Updated uploadRecording function with additional error details
   const uploadRecording = async (blob, type) => {
-    const formData = new FormData();
-    formData.append(type, blob, `${id}_${type}.webm`);
-    
-    if (type === 'canvas') {
-      // Only upload canvas immediately
-      await fetch(`/python/recordings/${id}`, {
-        method: 'POST',
-        body: formData
-      });
+    try {
+      const formData = new FormData();
+      formData.append(type, blob, `${id}_${type}.webm`);
+      // For canvas recordings, send to the dedicated backend endpoint
+      if (type === "canvas") {
+        const response = await fetch(`/python/recordings/${id}`, {
+          method: "POST",
+          body: formData,
+        });
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(
+            `Server responded with status ${response.status}: ${errorText}`
+          );
+        }
+      }
+    } catch (error) {
+      console.error(`Upload error (${type}):`, error);
+      setRecordingStatus("failed");
     }
   };
-  
-  // Transcript updates
+
+  // Update transcript with audio chunks
   const updateTranscript = async (chunk) => {
     try {
       const response = await fetch(`/python/update-transcript/${id}`, {
-        method: 'PATCH',
-        body: chunk
+        method: "PATCH",
+        body: chunk,
       });
-      if (!response.ok) throw new Error('Transcript update failed');
+      if (!response.ok) {
+        throw new Error("Transcript update failed");
+      }
     } catch (error) {
-      console.error('Transcript error:', error);
+      console.error("Transcript error:", error);
     }
   };
-  
-  // WebSocket initialization and management
-  const initializeWebSocket = useCallback(() => {
-    if (ws.current?.readyState === WebSocket.OPEN) return;
-    const socket = new WebSocket(
-      `wss://s14271.nyc1.piesocket.com/v3/1?api_key=uOkCOHkUVs4zhG89vWqp2CnM9i7dKdrbtG1Z3Z3Lqw&notify_self=1`
-    );
 
-    socket.onopen = () => {
-      console.log(`Connected to session channel: ${id}`);
-      console.log("WebSocket connected");
-      setWsConnected(true);
-      setConnectionError(null);
-      reconnectAttempts.current = 0;
-
-      // Send queued messages
-      while (pendingChanges.current.length > 0) {
-        const message = pendingChanges.current.shift();
-        socket.send(JSON.stringify(message));
-      }
-
-      // Join message
-      socket.send(
-        JSON.stringify({
-          type: "join",
-          userId: userId || `user_${Math.random().toString(36).substr(2, 9)}`,
-        })
-      );
-    };
-
-    // In initializeWebSocket
-    socket.onclose = (event) => {
-      console.log(`WebSocket closed: ${event.code}`);
-      setWsConnected(false);
-
-      // Don't reconnect on normal closure (1000) or if component is unmounting
-      if (
-        event.code !== 1000 &&
-        reconnectAttempts.current < maxReconnectAttempts
-      ) {
-        const delay = Math.min(
-          5000,
-          1000 * Math.pow(1.5, reconnectAttempts.current)
-        );
-        console.log(`Reconnecting in ${delay}ms...`);
-        setTimeout(initializeWebSocket, delay);
-        reconnectAttempts.current++;
-      }
-    };
-
-    socket.onerror = (error) => {
-      console.error("WebSocket error:", error);
-      setConnectionError(
-        `Connection error: ${error.message || "Unknown error"}`
-      );
-    };
-    socket.onmessage = (event) => {
-      try {
-        const wrapper = JSON.parse(event.data);
-        if (wrapper.type === "message") {
-          const data = wrapper.data;
-          // Add recording state synchronization
-          if (data.type === "recording_state") {
-            setMediaState((prev) => ({
-              ...prev,
-              lastSaved: data.timestamp,
-            }));
-          }
-        }
-      } catch (error) {
-        console.error("Message processing error:", error);
-      }
-    };
-
-    socket.onmessage = (event) => {
-      try {
-        const wrapper = JSON.parse(event.data);
-
-        // Handle PieSocket's message envelope
-        if (wrapper.type === "message") {
-          const data = wrapper.data;
-          switch (data.type) {
-            case "chat":
-              setMessages((prev) => [
-                ...prev,
-                {
-                  user: data.payload.user,
-                  text: data.payload.text,
-                  timestamp: data.payload.timestamp,
-                },
-              ]);
-
-              break;
-            case "whiteboard":
-              setWhiteboardData(data.payload);
-              break;
-            case "participants":
-              setParticipants(data.users);
-              break;
-            case "poll":
-              setPoll(data.payload.question);
-              break;
-            case "vote":
-              setVotes((prev) => ({
-                ...prev,
-                [data.payload.userId]: data.payload.vote,
-              }));
-              break;
-
-            case "close":
-              handleSessionClose();
-              break;
-            case "recording":
-              setMediaState((prev) => ({
-                ...prev,
-                isRecording: data.is_recording,
-                lastSaved: data.timestamp,
-              }));
-              break;
-          }
-        }
-        // Handle system messages like ping
-        else if (wrapper.type === "ping") {
-          socket.send(JSON.stringify({ type: "pong" }));
-        }
-      } catch (error) {
-        console.error("Message processing error:", error);
-      }
-    };
-
-    ws.current = socket;
-  }, [userId]);
-
-
-
-  // Session initialization
+  // Initialize session including media and heartbeat setup
   useEffect(() => {
     const initializeSession = async () => {
       try {
         const sessionRes = await fetch(`/python/sessions/${id}`);
+        if (!sessionRes.ok) {
+          throw new Error("Failed to fetch session data");
+        }
         const sessionData = await sessionRes.json();
         setIsHost(userId === sessionData.host_id);
-
-        if (ws.current?.readyState === WebSocket.OPEN) {
-          ws.current.close();
-        }
-
-        initializeWebSocket();
-
-        // Media handling
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: true,
         });
+        audioStreamRef.current = stream;
         if (audioRef.current) {
           audioRef.current.srcObject = stream;
         }
-
         mediaRecorder.current = new MediaRecorder(stream);
         const audioChunks = [];
-
         mediaRecorder.current.ondataavailable = (e) => {
           audioChunks.push(e.data);
         };
-
         mediaRecorder.current.onstop = async () => {
           try {
             setRecordingStatus("processing");
             const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
-            await uploadRecording(audioBlob);
+            await uploadRecording(audioBlob, "audio");
             setRecordingStatus("completed");
           } catch (error) {
             setRecordingStatus("failed");
           }
         };
-
         mediaRecorder.current.start();
-
-        // Heartbeat
-        const heartbeat = setInterval(() => {
-          if (ws.current?.readyState === WebSocket.OPEN) {
-            ws.current.send(JSON.stringify({ type: "heartbeat" }));
+        const heartbeatInterval = setInterval(() => {
+          if (wsConnected) {
+            send({ type: "heartbeat", payload: {} });
           }
         }, 30000);
-
         return () => {
-          clearInterval(heartbeat);
-          if (ws.current?.readyState === WebSocket.OPEN) {
-            ws.current.close();
-          }
+          clearInterval(heartbeatInterval);
           if (mediaRecorder.current?.state === "recording") {
             mediaRecorder.current.stop();
+          }
+          if (stream) {
+            stream.getTracks().forEach((track) => track.stop());
           }
         };
       } catch (error) {
@@ -381,85 +353,87 @@ const setupCanvasRecording = () => {
         setConnectionError(`Initialization error: ${error.message}`);
       }
     };
-
     if (id) initializeSession();
-  }, [id, userId, initializeWebSocket, uploadRecording]);
+  }, [id, userId, wsConnected, send]);
 
-  // Whiteboard handler with debounce and queue
+  // Handle whiteboard changes with debouncing
   const handleWhiteboardChange = useDebounce((elements, appState, files) => {
     const change = {
       type: "whiteboard",
       payload: { elements, appState, files },
     };
-
-    if (ws.current?.readyState === WebSocket.OPEN) {
-      ws.current.send(JSON.stringify(change));
-    } else if (ws.current?.readyState === WebSocket.CONNECTING) {
-      pendingChanges.current.push(change);
+    if (wsConnected) {
+      send(change);
     } else {
-      console.error("WebSocket not connected");
-      setConnectionError("Changes not saved - reconnecting...");
+      console.warn("WebSocket not connected, queuing whiteboard changes");
       pendingChanges.current.push(change);
-      initializeWebSocket();
     }
   }, 500);
 
+  // Send chat message using PieSocket publish
   const sendMessage = () => {
     if (!inputMessage.trim()) return;
-
     const message = {
       type: "chat",
-      text: inputMessage,
-      timestamp: Date.now(),
+      payload: {
+        user: userId,
+        text: inputMessage,
+        timestamp: Date.now(),
+      },
     };
-
-    if (ws.current?.readyState === WebSocket.OPEN) {
-      ws.current.send(JSON.stringify(message));
+    if (wsConnected) {
+      send(message);
       setInputMessage("");
     } else {
       setConnectionError("Cannot send message: WebSocket disconnected");
+      pendingChanges.current.push(message);
     }
   };
 
+  // Start a poll by publishing the poll message
   const startPoll = () => {
-    if (ws.current?.readyState === WebSocket.OPEN) {
-      ws.current.send(
-        JSON.stringify({
-          type: "poll",
-          payload: {
-            // Add proper payload
-            question: "Is your doubt resolved?",
-            timestamp: Date.now(),
-          },
-        })
-      );
-    }
-  };
-
-  const submitVote = (vote) => {
-    if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-      ws.current.send(
-        JSON.stringify({
-          type: "vote",
-          vote: vote,
-        })
-      );
+    if (wsConnected) {
+      send({
+        type: "poll",
+        payload: {
+          question: "Is your doubt resolved?",
+          timestamp: Date.now(),
+        },
+      });
     } else {
-      setConnectionError("Cannot submit vote: WebSocket is disconnected");
+      setConnectionError("Cannot start poll: WebSocket disconnected");
     }
   };
 
+  // Submit a vote using PieSocket publish
+  const submitVote = (vote) => {
+    if (wsConnected) {
+      send({
+        type: "vote",
+        payload: {
+          userId: userId,
+          vote: vote,
+        },
+      });
+    } else {
+      setConnectionError("Cannot submit vote: WebSocket disconnected");
+    }
+  };
+
+  // Handle session close by stopping recorders and processing transcript
   const handleSessionClose = async () => {
     try {
-      if (combinedRecorderRef.current?.state === "recording") {
-        combinedRecorderRef.current.stop();
+      if (combinedRecorderRef.current?.canvas?.state === "recording") {
+        combinedRecorderRef.current.canvas.stop();
       }
-
-      // Get final transcript from backend
+      if (combinedRecorderRef.current?.audio?.state === "recording") {
+        combinedRecorderRef.current.audio.stop();
+      }
+      if (mediaRecorder.current?.state === "recording") {
+        mediaRecorder.current.stop();
+      }
       const sessionRes = await fetch(`/python/sessions/${id}`);
       const { transcript } = await sessionRes.json();
-
-      // Process chunks for search
       await fetch("/python/process-transcript", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -468,38 +442,28 @@ const setupCanvasRecording = () => {
           transcript: transcript,
         }),
       });
-
       router.push("/");
     } catch (error) {
       console.error("Session closure failed:", error);
     }
   };
 
-  // Update the vote handling logic
+  // Automatically handle voting results when a poll is active
   useEffect(() => {
     if (poll && Object.keys(votes).length > 0) {
       const yesVotes = Object.values(votes).filter((v) => v).length;
       const totalVotes = Object.keys(votes).length;
-
       if (yesVotes > totalVotes / 2) {
-        handleSessionClose();
-
-        // Notify all participants
-        if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-          ws.current.send(
-            JSON.stringify({
-              type: "close",
-              session_id: id,
-            })
-          );
+        if (wsConnected) {
+          send({
+            type: "close",
+            payload: { session_id: id },
+          });
         }
+        handleSessionClose();
       }
     }
   }, [votes, poll, id]);
-
-
-
-  
   // Rest of the component remains similar with these UI additions:
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800">
@@ -553,10 +517,14 @@ const setupCanvasRecording = () => {
                 )}
                 {/* <div className="flex w-full text-sm text-center "> */}
                 <Whiteboard
-  ref={excalidrawRef}
-  initialData={whiteboardData}
-  onChange={handleWhiteboardChange}
-/>
+                  ref={excalidrawRef}
+                  initialData={whiteboardData}
+                  onChange={handleWhiteboardChange}
+                  onReady={() => {
+                    console.log("Whiteboard is ready");
+                    setWhiteboardReady(true);
+                  }}
+                />
 
                 {/* </div> */}
               </CardBody>
