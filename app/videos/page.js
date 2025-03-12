@@ -27,7 +27,7 @@ export default function Home() {
       <div className="min-h-screen bg-black transition-colors">
         <main className="container mx-auto py-8 px-4">
           <h1 className="text-3xl font-bold text-center mb-8 text-gray-900 dark:text-white">
-            Video Library {selectedCategory !== "All" && `- ${selectedCategory}`}
+            Video Library {selectedCategory !== "All" ?? `- ${selectedCategory}`}
           </h1>
           <SearchBar onSearch={handleSearch} />
           <VideoGrid videos={videos} />
