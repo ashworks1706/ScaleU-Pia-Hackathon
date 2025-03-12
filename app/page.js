@@ -18,9 +18,9 @@ export default function Home() {
   return (
     <>
       <SignedOut>
-        <div className="flex flex-col min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 text-white">
+        <div className="flex flex-col min-h-screen bg-black text-white">
           {/* Navbar */}
-          <nav className="fixed top-0 left-0 right-0 z-50 bg-gray-900/80 backdrop-blur-md border-b border-gray-800 shadow-lg">
+          <nav className="fixed top-0 left-0 right-0 z-50 bg-black backdrop-blur-md border-b border-gray-800 shadow-lg">
             <div className="container mx-auto flex items-center justify-between py-4 px-6">
               <Link href="/" className="flex items-center gap-2">
                 <span className="bg-gradient-to-br from-blue-500 to-blue-600 text-white font-bold rounded-lg p-1.5 text-xl">
@@ -146,14 +146,17 @@ function HeroSection() {
           >
             Explore Features
           </motion.a>
-          <motion.a
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            href="/register"
-            className="px-6 py-3 rounded-lg flex items-center gap-2 bg-gray-800 text-white hover:bg-gray-700 transition-all shadow-lg"
-          >
-            Get Started <span className="ml-2">→</span>
-          </motion.a>
+
+          {/* Replace the <a> tag with <SignInButton> */}
+          <SignInButton>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="px-6 py-3 rounded-lg flex items-center gap-2 bg-gray-800 text-white hover:bg-gray-700 transition-all shadow-lg"
+            >
+              Get Started <span className="ml-2">→</span>
+            </motion.button>
+          </SignInButton>
         </motion.div>
       </motion.div>
 
@@ -162,7 +165,7 @@ function HeroSection() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.8, delay: 0.8 }}
-        className="mt-12 backdrop-blur-md bg-gray-900/50 border border-gray-800 rounded-lg p-6 max-w-md mx-auto shadow-lg"
+        className="mt-12 backdrop-blur-md bg-black border border-gray-800 rounded-lg p-6 max-w-md mx-auto shadow-lg"
       >
         <h3 className="text-xl font-semibold mb-2 text-white">
           What Our Users Say
@@ -196,7 +199,7 @@ function FeaturesSection() {
   ];
 
   return (
-    <section id="features" className="py-16 bg-gray-900">
+    <section id="features" className="py-16 bg-black">
       <div className="container mx-auto px-4">
         <div className="text-center mb-12">
           <h2 className="text-4xl font-bold mb-4 text-white">
@@ -235,10 +238,9 @@ function FeaturesSection() {
 // Video Section Component
 function VideoSection() {
   return (
-    <section id="videos" className="py-16 bg-gray-900">
+    <section id="videos" className="py-16 bg-black">
       <div className="container mx-auto px-4">
-      
-       
+        {/* Video content goes here */}
       </div>
     </section>
   );
@@ -280,7 +282,7 @@ function LeaderboardSection() {
   ];
 
   return (
-    <section id="leaderboard" className="py-16 bg-gray-900">
+    <section id="leaderboard" className="py-16 bg-black">
       <div className="container mx-auto px-4">
         <div className="text-center mb-12">
           <h2 className="text-4xl font-bold mb-4 text-white">
@@ -343,7 +345,7 @@ function LeaderboardSection() {
 // Footer Component
 function Footer() {
   return (
-    <footer className="border-t border-gray-800 py-12 bg-gray-900">
+    <footer className="border-t border-gray-800 py-12 bg-black">
       <div className="container mx-auto px-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           <div>

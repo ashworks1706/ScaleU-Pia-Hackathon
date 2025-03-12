@@ -5,24 +5,25 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "prebackend": "python -m venv python/venv || echo 'Virtual environment exists, skipping creation'",
-    "backend-unix": "source python/venv/bin/activate && pip install -r python/requirements.txt && uvicorn main:app --reload --app-dir python",
-    "backend-win": "python\\venv\\Scripts\\activate.bat && pip install -r python\\requirements.txt && cd python && uvicorn main:app --reload",
+    "backend-unix": "source python/venv/bin/activate && pip install -r python/requirements.txt && python main.py",
+    "backend-win": "python\\venv\\Scripts\\activate.bat && pip install -r python\\requirements.txt && cd python && python main.py",
     "backend": "node -e \"process.platform === 'win32' ? process.exit(1) : process.exit(0)\" && npm run backend-unix || npm run backend-win",
-    "app": "concurrently \"npm run dev\" \"npm run backend\""
+    "app": "concurrently \"npm run backend\" \"npm run dev\" "
   },
   "dependencies": {
     "@clerk/nextjs": "^6.12.4",
+    "@excalidraw/excalidraw": "^0.18.0",
     "@heroui/react": "^2.7.5",
     "@heroui/system": "^2.4.12",
     "@heroui/theme": "^2.4.12",
     "framer-motion": "^12.5.0",
     "next": "15.2.2",
     "particles.js": "^2.0.0",
+    "piesocket-js": "^5.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.3.0",
     "react-tsparticles": "^1.43.1",
-    "react-webcam": "^7.2.0",
     "tsparticles": "^1.43.1"
   },
   "devDependencies": {

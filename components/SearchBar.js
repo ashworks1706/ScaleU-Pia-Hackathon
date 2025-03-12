@@ -16,21 +16,28 @@ const SearchBar = ({ onSearch }) => {
     "Computer Science"
   ];
 
-  const handleSearch = async (searchTerm, category) => {
-    try {
-      setIsLoading(true);
-      const response = await fetch(
-        `/api/search?q=${encodeURIComponent(searchTerm)}&category=${category}`
-      );
-      const data = await response.json();
-      onSearch(data.results, searchTerm,selectedCategory);
-    } catch (error) {
-      console.error("Search failed:", error);
-      onSearch([], searchTerm);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+// components/SearchBar.jsx
+const handleSearch = async (searchTerm, category) => {
+  try {
+    setIsLoading(true);
+    const response = await fetch('/python/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        query: searchTerm,
+        category: category
+      })
+    });
+    const data = await response.json();
+    onSearch(data.results, searchTerm, category);
+  } catch (error) {
+    console.error("Search failed:", error);
+    onSearch([], searchTerm);
+  } finally {
+    setIsLoading(false);
+  }
+};
+
 
   const debouncedSearch = (term, category) => {
     clearTimeout(searchTimeout.current);
@@ -38,7 +45,7 @@ const SearchBar = ({ onSearch }) => {
       onSearch([], "");
       return;
     }
-    searchTimeout.current = setTimeout(() => handleSearch(term, category), 300);
+    searchTimeout.current = setTimeout(() => handleSearch(term, category), 700);
   };
 
   const handleChange = (e) => {
@@ -62,7 +69,7 @@ const SearchBar = ({ onSearch }) => {
         <select
           value={selectedCategory}
           onChange={handleCategoryChange}
-          className="block w-32 px-2 text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all appearance-none"
+          className="block w-32 px-2 text-gray-900 bg-black border border-neutral-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all appearance-none"
           aria-label="Select category"
         >
           {categories.map((category) => (
@@ -95,7 +102,7 @@ const SearchBar = ({ onSearch }) => {
             type="text"
             value={query}
             onChange={handleChange}
-            className="block p-2 pl-10 pr-10 w-full text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:pl-3 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+            className="block p-2 pl-10 pr-10 w-full text-gray-900 bg-black border border-neutral-700 focus:pl-3 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
             placeholder="Search for sessions..."
             onFocus={() => (clickPoint.current.style.display = "none")}
             onBlur={() => !query && (clickPoint.current.style.display = "block")}

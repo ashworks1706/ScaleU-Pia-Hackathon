@@ -1,4 +1,4 @@
-"use client"; // Required for using React hooks in Next.js
+"use client";
 
 import React, { useEffect, useState } from "react";
 import NavbarSection from "../../components/Navbar";
@@ -22,7 +22,8 @@ export default function LeaderboardPage() {
   useEffect(() => {
     const fetchLeaderboard = async () => {
       try {
-        const response = await fetch("/api/leaderboard");
+        // Updated endpoint to point to our new backend leaderboard endpoint.
+        const response = await fetch("/python/leaderboard");
         if (!response.ok) {
           throw new Error("Failed to fetch leaderboard data");
         }
@@ -33,7 +34,7 @@ export default function LeaderboardPage() {
         );
         setMembers(sortedMembers);
       } catch (error) {
-        // If there's an error, use temporary data
+        // If there's an error, use temporary data and record the error message.
         setError(error.message);
         const sortedMembers = temporaryData.sort((a, b) => b.points - a.points);
         setMembers(sortedMembers);
@@ -52,7 +53,7 @@ export default function LeaderboardPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 text-white flex items-center justify-center">
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
         <div className="flex flex-col items-center">
           <div className="animate-bounce w-12 h-12 mb-4">
             <svg
@@ -77,10 +78,9 @@ export default function LeaderboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 text-white">
+    <div className="min-h-screen bg-black text-white">
       {/* Navbar */}
       <NavbarSection />
-
       {/* Leaderboard Content */}
       <div className="p-8">
         <h1 className="text-4xl font-bold text-center mb-8">Leaderboard</h1>
@@ -90,7 +90,7 @@ export default function LeaderboardPage() {
             <input
               type="text"
               placeholder="Search members..."
-              className="w-full p-3 rounded-lg bg-gray-700 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full p-3 rounded-lg bg-black border border-neutral-700 text-white placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
@@ -139,7 +139,9 @@ export default function LeaderboardPage() {
                           )}
                         </td>
                         <td className="py-3 px-4">{member.name}</td>
-                        <td className="py-3 px-4 text-right">{member.points}</td>
+                        <td className="py-3 px-4 text-right">
+                          {member.points}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

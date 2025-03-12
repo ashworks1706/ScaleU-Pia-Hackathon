@@ -9,7 +9,6 @@ import { useRouter } from "next/navigation";
 
 export default function Landing() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
   const [activeChannel, setActiveChannel] = useState("General");
   const app = useRouter();
   const [messages, setMessages] = useState({
@@ -50,11 +49,12 @@ export default function Landing() {
     },
     {
       id: 2,
-      title: "Physics",
-      category: "Science",
+      title: "Wave Motion",
+      category: "Physics",
       participants: 8,
       duration: "1 hour",
-      isLive: false,link:"",
+      isLive: false,
+      link:"",
     },
     {
       id: 3,
@@ -86,31 +86,31 @@ export default function Landing() {
   };
 
   return (
-    <div className="flex flex-row justify-between w-full min-h-screen bg-gradient-to-b from-gray-900 to-gray-950 text-white">
+    <div className="flex flex-row justify-between w-full min-h-screen bg-black text-white">
       {/* Sidebar */}
       <SidebarChat />
 
       {/* Main Content */}
-      <div className="flex-1 w-full min-h-screen justify-between flex flex-col">
+      <div className="flex-1 w-full min-h-screen gap-12 flex flex-col">
         {/* Navbar */}
         <NavbarSection />
 
         {/* Search Bar Section with CTA */}
-        <section className="py-12">
-          <div className="container mx-auto px-4 text-center">
-            <h2 className="text-4xl font-bold mb-6 text-white">
+        <section className="pl-12">
+          <div className="container px-4">
+            <h2 className="text-5xl font-bold mb-12 text-white">
               Find the Perfect Session
             </h2>
-            <form onSubmit={handleMainSearch} className="max-w-2xl mx-auto">
+            <form onSubmit={handleMainSearch} className="max-w-2xl">
               <div className="relative">
                 <input
                   type="text"
                   name="search"
                   placeholder="Search sessions..."
-                  className="w-full p-3 pl-10 rounded-lg bg-gray-800 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full p-3 pl-10 rounded-lg bg-black border border-neutral-700 text-white placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <svg
-                  className="absolute left-3 top-3 h-5 w-5 text-gray-400"
+                  className="absolute left-3 top-3 h-5 w-5 text-neutral-400"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -132,33 +132,34 @@ export default function Landing() {
         </section>
 
         {/* Video Library Section */}
-        <section className="py-16">
-          <div className="container mx-auto px-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        <section className="pl-12">
+          <div className="container px-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               {filteredSessions.map((session) => (
                 <div
                   key={session.id}
-                  className="bg-gray-800 rounded-lg shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-2 relative overflow-hidden"
+                  className="rounded-md shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-2 relative overflow-hidden"
                 >
                   {/* Live Badge */}
                   {session.isLive && (
-                    <div className="absolute top-4 right-4 bg-red-600 text-white text-xs font-medium px-2.5 py-1 rounded-full">
+                    <div className="absolute top-4 right-4 border border-red-400 text-red-400 text-xs font-semibold px-2.5 py-1 rounded-full">
                       LIVE
                     </div>
                   )}
 
                   {/* Top Half: Gradient Background */}
-                  <div className="bg-gradient-to-br from-blue-600 to-purple-600 p-6 rounded-t-lg">
-                    <h3 className="text-2xl font-bold text-white">{session.title}</h3>
-                    <span className="text-sm text-blue-200">{session.category}</span>
+                  <div className="h-28 p-6 rounded-t-md border border-neutral-700" style={{ background: `linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)), url("/${session.category.toLowerCase()}.jpg") top` }}>
+
                   </div>
 
                   {/* Bottom Half: Session Details */}
-                  <div className="p-6">
-                    <div className="flex items-center gap-4 text-gray-400">
-                      <div className="flex items-center gap-2">
+                  <div className="p-6 border border-neutral-700 rounded-b-md flex flex-col gap-3">
+                  <h3 className="text-2xl font-bold text-white">{session.title}</h3>
+                  <span className="text-md font-medium text-blue-200">{session.category}</span>
+                    <div className="flex gap-4 text-neutral-300">
+                      <div className="flex gap-2">
                         <svg
-                          className="h-5 w-5 text-gray-400"
+                          className="h-5 w-5"
                           fill="none"
                           stroke="currentColor"
                           viewBox="0 0 24 24"
@@ -173,9 +174,9 @@ export default function Landing() {
                         </svg>
                         <span>{session.participants}</span>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex gap-2">
                         <svg
-                          className="h-5 w-5 text-gray-400"
+                          className="h-5 w-5"
                           fill="none"
                           stroke="currentColor"
                           viewBox="0 0 24 24"

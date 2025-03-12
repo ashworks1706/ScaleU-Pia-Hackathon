@@ -75,7 +75,7 @@ const TrophyIcon = () => (
 const PlusIcon = () => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
-    className="h-5 w-5"
+    className="h-4 w-4"
     viewBox="0 0 20 20"
     fill="currentColor"
   >
@@ -129,12 +129,11 @@ export default function NavbarSection() {
       setIsModalOpen(false);
     }
   };
-
   return (
     <>
       {/* Navbar with Glassmorphism Effect */}
       <Navbar
-        className="h-16 backdrop-blur-md bg-gray-900/50 border-b border-gray-800"
+        className="px-12 h-16 backdrop-blur-md bg-black border-b border-neutral-700"
         onMenuOpenChange={setIsMenuOpen}
       >
       <NavbarContent>
@@ -154,7 +153,7 @@ export default function NavbarSection() {
             <NavbarItem key={index}>
               <Link
                 href={item.href}
-                className="flex items-center gap-2 text-gray-300 hover:text-white transition-colors"
+                className="flex items-center gap-2 text-neutral-300 hover:text-white transition-colors"
               >
                 {item.icon}
                 <span>{item.name}</span>
@@ -167,25 +166,32 @@ export default function NavbarSection() {
         <NavbarContent justify="end">
           <NavbarItem>
             <Button
-              className="bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-full px-4 py-2 hover:from-blue-700 hover:to-purple-700 transition-all flex items-center gap-2"
-              onClick={() => setIsModalOpen(true)}
-            >
+              className="py-1 px-4 text-sm flex bg-blue-600 text-white rounded-3xl"
+              color="foreground"
+              onPress={()=> router.push("/create-session")}            >
               <PlusIcon className="h-4 w-4" />
               <span className="text-sm">Start Zoom</span>
             </Button>
           </NavbarItem>
-          <NavbarItem>
-            <UserButton />
+          <NavbarItem className="p-0 m-0">
+            <UserButton appearance={{
+              elements: {
+                avatarBox: {
+                  width: "36px",
+                  height: "36px",
+                },
+              },
+            }} />
           </NavbarItem>
         </NavbarContent>
 
         {/* Mobile Menu */}
-        <NavbarMenu className="backdrop-blur-md bg-gray-900/50">
+        <NavbarMenu className="backdrop-blur-md bg-neutral-900/50">
           {menuItems.map((item, index) => (
             <NavbarMenuItem key={index}>
               <Link
                 href={item.href}
-                className="w-full flex items-center gap-2 text-gray-300 hover:text-white transition-colors"
+                className="w-full flex items-center gap-2 text-neutral-300 hover:text-white transition-colors"
               >
                 {item.icon}
                 <span>{item.name}</span>
@@ -195,40 +201,6 @@ export default function NavbarSection() {
         </NavbarMenu>
       </Navbar>
 
-      {/* Modal for Starting a New Session */}
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        className="backdrop-blur-lg bg-gray-900/50"
-      >
-        <ModalContent className="bg-gray-800 text-white">
-          <ModalHeader className="text-xl font-bold">Start a New Session</ModalHeader>
-          <ModalBody>
-            <Input
-              placeholder="Enter a title for your session"
-              value={sessionTitle}
-              onChange={(e) => setSessionTitle(e.target.value)}
-              className="bg-gray-700 text-white placeholder-gray-400"
-              fullWidth
-            />
-          </ModalBody>
-          <ModalFooter>
-            <Button
-              className="bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-full px-6 py-2 hover:from-blue-700 hover:to-purple-700 transition-all"
-              onClick={handleStartZoom}
-              disabled={isLoading || !sessionTitle.trim()}
-            >
-              {isLoading ? "Creating..." : "Start Session"}
-            </Button>
-            <Button
-              className="bg-gray-700 text-white rounded-full px-6 py-2 hover:bg-gray-600 transition-all"
-              onClick={() => setIsModalOpen(false)}
-            >
-              Cancel
-            </Button>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
     </>
   );
 }
