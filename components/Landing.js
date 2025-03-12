@@ -9,7 +9,6 @@ import { useRouter } from "next/navigation";
 
 export default function Landing() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
   const [activeChannel, setActiveChannel] = useState("General");
   const app = useRouter();
   const [messages, setMessages] = useState({
@@ -48,11 +47,12 @@ export default function Landing() {
     },
     {
       id: 2,
-      title: "Physics",
-      category: "Science",
+      title: "Wave Motion",
+      category: "Physics",
       participants: 8,
       duration: "1 hour",
-      isLive: false,link:"",
+      isLive: false,
+      link:"",
     },
     {
       id: 3,

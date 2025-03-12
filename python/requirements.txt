@@ -4,3 +4,13 @@ python-multipart
 qdrant-client
 sentence-transformers
 google-generativeai
+supabase
+flask
+flask-cors
+qdrant-client
+sentence-transformers
+google-generativeai
+supabase
+python-dotenv
+werkzeug
+pydantic 

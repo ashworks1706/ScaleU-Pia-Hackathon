@@ -43,38 +43,6 @@ export default function NavbarSection() {
 
   const menuItems = ["Home", "Videos", "Activity", "Leaderboard"];
 
-  const handleStartZoom = async () => {
-    if (!sessionTitle.trim()) return;
-    
-    try {
-      setIsLoading(true);
-      const response = await fetch("/api/create-zoom-session", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          title: sessionTitle,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to create Zoom session", response);
-      }
-
-      const data = await response.json();
-      
-      // Redirect to the session page with the session ID
-      router.push(`/session/${data.session_id}?join=${data.join_url}`);
-      
-    } catch (error) {
-      console.error("Error creating Zoom session:", error);
-      alert("Failed to create Zoom session. Please try again.");
-    } finally {
-      setIsLoading(false);
-      setIsModalOpen(false);
-    }
-  };
 
   return (
     <>
@@ -113,7 +81,7 @@ export default function NavbarSection() {
             <Button
               className="py-2 px-4 text-sm bg-gray-600 text-white rounded-3xl"
               color="foreground"
-              onClick={() => setIsModalOpen(true)}
+              onPress={()=> router.push("/create-session")}
             >
               + Start Zoom
             </Button>
@@ -145,31 +113,6 @@ export default function NavbarSection() {
         </NavbarMenu>
       </Navbar>
 
-      <Modal className="w-full min-h-screen items-center justify-center backdrop-blur-lg bg-gray-800 p-4 space-y-24  " isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
-        <ModalContent>
-          <ModalHeader>Start a New Session</ModalHeader>
-          <ModalBody>
-            <Input
-              placeholder="Enter a title for your session"
-              value={sessionTitle}
-              onChange={(e) => setSessionTitle(e.target.value)}
-              fullWidth
-            />
-          </ModalBody>
-          <ModalFooter>
-            <Button
-              color="primary"
-              onClick={handleStartZoom}
-              disabled={isLoading || !sessionTitle.trim()}
-            >
-              {isLoading ? "Creating..." : "Start Session"}
-            </Button>
-            <Button color="neutral" onClick={() => setIsModalOpen(false)}>
-              Cancel
-            </Button>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
     </>
   );
 }

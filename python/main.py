@@ -1,395 +1,337 @@
-# python/main.py
-from fastapi import FastAPI, Query, BackgroundTasks, HTTPException, Body
-from fastapi.middleware.cors import CORSMiddleware
+# Remove duplicate imports
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 from qdrant_client import QdrantClient, models
 from qdrant_client.http import models as rest_models
 from sentence_transformers import SentenceTransformer
 import re
 import uuid
-import httpx
+import google.generativeai as genai
 import os
 import time
-from pydantic import BaseModel
-from typing import Optional
 import logging
-import google.generativeai as genai
-from google.generativeai.types import HarmCategory, HarmBlockThreshold
 import json
+from datetime import datetime
+from supabase import create_client
+from werkzeug.utils import secure_filename
+from pydantic import BaseModel
+
+
+app = Flask(__name__)
+CORS(app)
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize FastAPI app
-app = FastAPI()
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyBru5qfjU7IYRrLNOL-FiQrBjG1mO-w2aQ")
 
-# Configure CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with actual origins
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+QDRANT_URL = os.getenv("QDRANT_URL","https://0eb2bc77-f3ea-4351-b6d5-4cb07cf499e9.europe-west3-0.gcp.cloud.qdrant.io/")
+QDRANT_API_KEY = os.getenv("QDRANT_API_KEY","eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIiwiZXhwIjoxNzQyMDgxMjcwfQ.CJIiGHpCopMYIr9B_gIlkulaJkazq5Y_YXNHxMxCMtk")
 
-QDRANT_URL = os.getenv("QDRANT_URL", "https://0eb2bc77-f3ea-4351-b6d5-4cb07cf499e9.europe-west3-0.gcp.cloud.qdrant.io")
-QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIiwiZXhwIjoxNzQyMDgxMjcwfQ.CJIiGHpCopMYIr9B_gIlkulaJkazq5Y_YXNHxMxCMtk")
+# Configure Gemini
+genai.configure(api_key="AIzaSyBru5qfjU7IYRrLNOL-FiQrBjG1mO-w2aQ")
+gemini_model = genai.GenerativeModel('gemini-1.5-flash')
 
-# Initialize Qdrant client
-client = QdrantClient(
-    url=QDRANT_URL,
-    api_key=QDRANT_API_KEY,
-)
+# Initialize clients
+client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
 embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+SUPABASE_URL = os.getenv("SUPABASE_URL", "https://nqncxdmlomcsgunxhtze.supabase.co")  # e.g., "https://xyzcompany.supabase.co"
+SUPABASE_KEY = os.getenv("SUPABASE_KEY","eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5xbmN4ZG1sb21jc2d1bnhodHplIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDE3NTA1NTksImV4cCI6MjA1NzMyNjU1OX0.XSZRfBD8o_bzmeavime7MXcsNj6WLVkc4Ozssjzuhfs")  # e.g., "your-supabase-key" 
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# Zoom API configuration
 
-
-# Configure Gemini API
-genai.configure(api_key=GEMINI_API_KEY)
-generation_config = {
-    "temperature": 0.2,
-    "top_p": 0.8,
-    "top_k": 16,
-    "max_output_tokens": 2048,
-}
-safety_settings = {
-    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-}
-
-# Initialize Gemini model
-model = genai.GenerativeModel(
-    model_name="gemini-2.0-flash",
-    generation_config=generation_config,
-    safety_settings=safety_settings
-)
-
-# Gemini API configuration
-
-# Models
-class ZoomSessionRequest(BaseModel):
-    title: str
-    duration: Optional[int] = 60  # in minutes
-
-class TranscriptUpdateRequest(BaseModel):
-    session_id: str
-    transcript: str
-
-class SessionCompleteRequest(BaseModel):
-    session_id: str
-    participant_count: int
-    final_transcript: str
-    recording_link: Optional[str] = None
-
-@app.on_event("startup")
-async def startup_event():
-    # Create videos collection if it doesn't exist
+def initialize():
     try:
-        logger.info(f"Connecting to Qdrant Cloud at {QDRANT_URL}")
         collections = client.get_collections().collections
-        collection_names = [c.name for c in collections]
-        
-        if "videos" not in collection_names:
-            logger.info("Creating 'videos' collection in Qdrant Cloud")
+        # Create collections if missing
+        if not any(c.name == "videos" for c in collections):
             client.create_collection(
                 collection_name="videos",
                 vectors_config=rest_models.VectorParams(
-                    size=384,  # Size for all-MiniLM-L6-v2
+                    size=384,
                     distance=rest_models.Distance.COSINE
                 )
             )
-            logger.info("'videos' collection created successfully")
-        if "video_chunks" not in collection_names:
-            logger.info("Creating 'video_chunks' collection in Qdrant Cloud")
+        if not any(c.name == "video_chunks" for c in collections):
             client.create_collection(
                 collection_name="video_chunks",
                 vectors_config=rest_models.VectorParams(
-                    size=384,  # Size for all-MiniLM-L6-v2
+                    size=384,
                     distance=rest_models.Distance.COSINE
                 )
             )
-            logger.info("'videos' collection created successfully")
-        
-        # Rest of the function remains the same
-        
-        logger.info(f"Qdrant Cloud dashboard available at your Qdrant Cloud console")
-        
+        logger.info("Qdrant initialization complete")
     except Exception as e:
-        logger.error(f"Error during startup: {e}")
+        logger.error(f"Startup error: {str(e)}")
 
-@app.post("/api/create-zoom-session")
-async def create_zoom_session(request: ZoomSessionRequest):
-    # Generate a unique session ID
-    session_id = str(uuid.uuid4())
-    ZOOM_API_KEY = os.getenv("ZOOM_API_KEY", "zDVYd0MjN1awSDAdqw9Un0sbAem4wWFf")
-    ZOOM_ACCOUNT_ID = os.getenv("ZOOM_ACCOUNT_ID", "Tn6CeQOaS2-3bXa1_sIyKw")
+@app.route('/python/create-session', methods=['POST'])
+def create_session():
     try:
-        # Get Zoom API credentials from environment variables
-        
-        if not all([ZOOM_API_KEY, ZOOM_API_KEY, ZOOM_ACCOUNT_ID]):
-            raise HTTPException(
-                status_code=500,
-                detail="Zoom API credentials not configured properly"
-            )
-
-        # Generate Zoom API access token
-        async with httpx.AsyncClient() as client_http:
-            auth_response = await client_http.post(
-                "https://zoom.us/oauth/token",
-                data={
-                    "grant_type": "account_credentials",
-                    "account_id": ZOOM_ACCOUNT_ID
-                },
-                auth=(ZOOM_CLIENT_ID, ZOOM_CLIENT_SECRET)
-            )
-
-
-            if auth_response.status_code != 200:
-                raise HTTPException(
-                    status_code=auth_response.status_code,
-                    detail="Zoom authentication failed"
-                )
-
-            auth_data = auth_response.json()
-            access_token = auth_data.get("access_token")
-
-            # Create Zoom meeting payload
-            zoom_request_payload = {
-                "topic": request.title,
-                "type": 2,  # Scheduled meeting
-                "duration": request.duration,
-                "settings": {
-                    "host_video": True,
-                    "participant_video": True,
-                    "join_before_host": True,
-                    "auto_recording": "cloud",
-                    "waiting_room": False
-                }
-            }
-
-            # Create Zoom meeting
-            zoom_api_response = await client_http.post(
-                "https://api.zoom.us/v2/users/me/meetings",
-                headers={
-                    "Authorization": f"Bearer {access_token}",
-                    "Content-Type": "application/json"
-                },
-                json=zoom_request_payload
-            )
-
-            if zoom_api_response.status_code != 201:
-                raise HTTPException(
-                    status_code=zoom_api_response.status_code,
-                    detail=f"Zoom API Error: {zoom_api_response.text}"
-                )
-
-            zoom_response = zoom_api_response.json()
-
-        # Store meeting data in Qdrant
-        embedding = embedding_model.encode(request.title).tolist()
+        data = request.get_json()  # Get data directly from request
+        session_id = str(uuid.uuid4())
         
         client.upsert(
             collection_name="videos",
             points=[
                 rest_models.PointStruct(
                     id=session_id,
-                    vector=embedding,
+                    vector=embedding_model.encode(data['title']).tolist(),
                     payload={
-                        "title": request.title,
+                        "title": data['title'],
+                        "category": data['category'],
+                        "host_id": data.get('user_id'),
                         "transcript": "",
-                        "category": request.category,
                         "upvotes": 0,
-                        "link": zoom_response["join_url"],
+                        "status": "live",
                         "created_at": int(time.time()),
-                        "zoom_meeting_id": zoom_response["id"],
-                        "password": zoom_response.get("password", "")
+                        "participants": 0,
+                        "link": f"/videos/live/{session_id}"
                     }
                 )
             ]
         )
-        
-        return {
-            "session_id": session_id,
-            "join_url": zoom_response["join_url"],
-            "start_url": zoom_response.get("start_url"),
-            "password": zoom_response.get("password", ""),
-            "meeting_id": zoom_response["id"]
-        }
-        
-    except HTTPException as he:
-        raise he
+        return jsonify({"session_id": session_id}), 200
     except Exception as e:
-        logger.error(f"Error creating Zoom session: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to create Zoom session. Please check server logs."
-        )
+        return jsonify({"error": str(e)}), 500
 
-@app.post("/api/update-transcript")
-async def update_transcript(request: TranscriptUpdateRequest):
+# In /python/update-transcript
+@app.route('/python/update-transcript', methods=['POST'])
+def update_transcript():
     try:
-        # Get existing document
-        results = client.retrieve(
+        data = request.get_json()
+        client.set_payload(
             collection_name="videos",
-            ids=[request.session_id],
+            points=[data['session_id']],  # Add this
+            payload={"transcript": data['transcript']}
+        )
+        return jsonify({"status": "success"}), 200
+        
+    except Exception as e:
+        logger.error(f"Transcript update failed: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/python/sessions/<session_id>', methods=['GET'])
+def get_session(session_id):
+    try:
+        result = client.retrieve(
+            collection_name="videos",
+            ids=[session_id],
             with_payload=True
         )
-        
-        if not results:
-            raise HTTPException(status_code=404, detail="Session not found")
-        
-        # Update transcript
-        client.set_payload(
-            collection_name="videos",
-            ids=[request.session_id],
-            payload={"transcript": request.transcript}
-        )
-        
-        return {"status": "success"}
+        if not result:
+            return jsonify({"error": "Session not found"}), 404
+            
+        return jsonify({
+            "host_id": result[0].payload.get("host_id"),
+            "title": result[0].payload.get("title"),
+            "status": result[0].payload.get("status")
+        }), 200
         
     except Exception as e:
-        logger.error(f"Error updating transcript: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Session fetch failed: {str(e)}")
+        return jsonify({"error": "Session fetch failed"}), 500
 
-@app.post("/api/complete-session")
-async def complete_session(request: SessionCompleteRequest, background_tasks: BackgroundTasks):
+@app.route('/python/complete-session', methods=['POST'])
+def complete_session():
     try:
-        # Update session with final data
+        data = request.get_json()
+        session_id = data['session_id']
+        
+        # Mark session as completed
         client.set_payload(
             collection_name="videos",
-            ids=[request.session_id],
+            points=[session_id],
             payload={
-                "transcript": request.final_transcript,
-                "upvotes": request.participant_count,
-                "link": request.recording_link or f"https://zoom.us/rec/{request.session_id}",
+                "status": "completed",
                 "completed_at": int(time.time())
             }
         )
         
-        # Process transcript into chunks in the background
-        background_tasks.add_task(
-            process_transcript_chunks, 
-            request.session_id,
-            request.final_transcript
-        )
+        # Clear active transcript updates
+        # Add Redis or database flag if using persistent storage
         
-        return {"status": "success"}
-        
-    except Exception as e:
-        logger.error(f"Error completing session: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return jsonify({"status": "success"}), 200
 
-async def process_transcript_chunks(session_id: str, transcript: str):
+    except Exception as e:
+        logger.error(f"Session completion failed: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+
+def process_transcript_chunks(session_id: str, transcript: str):
     try:
-        # Retrieve the video document
         video = client.retrieve(
             collection_name="videos",
             ids=[session_id],
             with_payload=True
         )[0]
         
-        # Split transcript into chunks
         chunks = chunk_transcript(transcript)
+        points = [
+            rest_models.PointStruct(
+                id=f"{session_id}_{i}",
+                vector=embedding_model.encode(chunk).tolist(),
+                payload={
+                    "video_id": session_id,
+                    "chunk_text": chunk,
+                    "title": video.payload["title"],
+                    "upvotes": video.payload["upvotes"],
+                    "link": video.payload.get("link", "")
+                }
+            ) for i, chunk in enumerate(chunks)
+        ]
         
-        # Generate embeddings and store chunks
-        points = []
-        for i, chunk in enumerate(chunks):
-            chunk_id = f"{session_id}_{i}"
-            embedding = embedding_model.encode(chunk).tolist()
-            
-            points.append(
-                rest_models.PointStruct(
-                    id=chunk_id,
-                    vector=embedding,
-                    payload={
-                        "video_id": session_id,
-                        "chunk_text": chunk,
-                        "title": video.payload["title"],
-                        "upvotes": video.payload["upvotes"],
-                        "link": video.payload["link"]
-                    }
-                )
-            )
-        
-        # Batch insert chunks
+        # Batch insert
         for i in range(0, len(points), 100):
-            batch = points[i:i+100]
             client.upsert(
                 collection_name="video_chunks",
-                points=batch
+                points=points[i:i+100]
             )
             
     except Exception as e:
-        logger.error(f"Error processing transcript chunks: {e}")
+        logger.error(f"Transcript processing failed: {str(e)}")
 
 def chunk_transcript(transcript: str, window_size: int = 2) -> list:
     sentences = re.split(r'(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=\.|\?)\s', transcript)
-    chunks = [
+    return [
         ' '.join(sentences[max(0,i-window_size):i+window_size+1])
         for i in range(len(sentences))
     ]
-    return chunks
 
-@app.get("/api/search")
-async def search_videos(q: str = Query(...)):
-    # Generate query embedding
-    query_vector = embedding_model.encode(q).tolist()
-    
-    # Hybrid search with Qdrant
-    search_results = client.search(
-        collection_name="video_chunks",
-        query_vector=query_vector,
-        query_filter=models.Filter(
-            should=[models.FieldCondition(
-                key="chunk_text",
-                match=models.MatchText(text=q)
-            )]
-        ),
-        limit=20,
-        with_payload=True,
-        with_vectors=False
-    )
-    
-    # Process and deduplicate results
-    video_map = {}
-    for result in search_results:
-        video_id = result.payload['video_id']
-        if video_id not in video_map or result.score > video_map[video_id]['score']:
-            video_map[video_id] = {
-                "title": result.payload['title'],
-                "chunk": result.payload['chunk_text'],
-                "score": result.score,
-                "upvotes": result.payload['upvotes'],
-                "link": result.payload['link']
-            }
-    
-    # Highlight relevant text
-    processed = []
-    for video in video_map.values():
-        start_idx = video['chunk'].lower().find(q.lower())
-        if start_idx == -1:
-            continue
-            
-        context_start = max(0, start_idx - 50)
-        context_end = min(len(video['chunk']), start_idx + len(q) + 50)
-        excerpt = video['chunk'][context_start:context_end]
+
+# Update your backend recording endpoint
+@app.route('/python/recordings/<session_id>', methods=['POST'])
+def upload_recording(session_id):
+    if 'file' not in request.files:
+        return jsonify({"error": "No file provided"}), 400
         
-        highlighted = re.sub(
-            f'({re.escape(q)})', 
-            '<mark class="bg-purple-200 text-purple-900">\\1</mark>', 
-            excerpt, 
-            flags=re.IGNORECASE
+    file = request.files['file']
+    try:
+        path = f"recordings/{session_id}/{datetime.now().isoformat()}.webm"
+        file_content = file.read()
+        
+        res = supabase.storage() \
+            .from_("recordings") \
+            .upload(path, file_content, file.content_type)
+        
+        url = supabase.storage() \
+            .from_("recordings") \
+            .get_public_url(path)
+
+        client.set_payload(
+            collection_name="videos",
+            ids=[session_id],
+            points=[session_id],  # Add this
+            payload={"link": url}
         )
         
-        processed.append({
-            "title": video['title'],
-            "relevant": highlighted,
-            "upvotes": video['upvotes'],
-            "link": video['link']
-        })
+        return jsonify({"status": "success", "url": url}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-    return {"results": sorted(processed, key=lambda x: -x['upvotes'])[:10] if processed else []}
+@app.route('/python/search', methods=['POST'])
+def enhanced_search():
+    print("recieved")
+    try:
+        
+        data = request.get_json()
+        if not request.is_json:
+            return jsonify({"error": "Request must be JSON"}), 400
+        query = data.get('query', '')
+        category = data.get('category', 'All')
+
+        # Generate query variations with Gemini
+        try:
+            prompt = f"""Generate 4 search query variations for: "{query}". 
+            Return ONLY a JSON array without any formatting: ["query1", "query2", "query3", "query4"]"""
+            
+            response = gemini_model.generate_content(prompt)
+            
+            # Extract text from response object
+            if response and response.candidates:
+                raw_response = response.candidates[0].content.parts[0].text
+                queries = json.loads(raw_response.strip('` \n').replace('json\n', ''))
+                queries.append(query)
+            else:
+                queries = [query]
+
+        except (json.JSONDecodeError, AttributeError) as e:
+            logger.error(f"Gemini response error: {str(e)}")
+            queries = [query]
+
+
+        # Search for all query variations
+        all_results = []
+        for q in queries:
+            query_vector = embedding_model.encode(q).tolist()
+            
+            # Build category filter
+            filters = []
+            if category != "All":
+                filters.append(models.FieldCondition(
+                    key="category",
+                    match=models.MatchValue(value=category)
+                ))
+            
+            search_results = client.search(
+                collection_name="video_chunks",
+                query_vector=query_vector,
+                query_filter=models.Filter(must=filters),
+                limit=10,
+                with_payload=True
+            )
+            all_results.extend(search_results)
+
+        # Process and deduplicate results
+        video_map = {}
+        for result in all_results:
+            video_id = result.payload['video_id']
+            if video_id not in video_map or result.score > video_map[video_id]['score']:
+                video_map[video_id] = {
+                    "video_data": result.payload,
+                    "best_score": result.score
+                }
+
+        # Get full transcripts and find relevant chunks
+        processed = []
+        for video_id, data in video_map.items():
+            video = client.retrieve(
+                collection_name="videos",
+                ids=[video_id],
+                with_payload=True
+            )[0]
+            
+            chunks = chunk_transcript(video.payload["transcript"])
+            best_chunk = max(chunks, key=lambda chunk: 
+                embedding_model.encode(chunk).dot(
+                    embedding_model.encode(query)
+                )
+            )
+            
+            highlighted = re.sub(
+                f'({re.escape(query)})', 
+                '<mark class="bg-purple-200 text-purple-900">\\1</mark>', 
+                best_chunk, 
+                flags=re.IGNORECASE
+            )
+
+            processed.append({
+                "title": video.payload["title"],
+                "relevant": highlighted,
+                "upvotes": video.payload["upvotes"],
+                "link": video.payload.get("link", ""),
+                "category": video.payload["category"]
+            })
+
+        return jsonify({
+            "results": sorted(processed, key=lambda x: -x['upvotes'])[:10]
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Search failed: {str(e)}")
+        return jsonify({"error": "Search operation failed"}), 500
+
+if __name__ == '__main__':
+    initialize()
+    app.run(debug=True)

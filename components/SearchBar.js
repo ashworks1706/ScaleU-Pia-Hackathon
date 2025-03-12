@@ -16,21 +16,28 @@ const SearchBar = ({ onSearch }) => {
     "Computer Science"
   ];
 
-  const handleSearch = async (searchTerm, category) => {
-    try {
-      setIsLoading(true);
-      const response = await fetch(
-        `/api/search?q=${encodeURIComponent(searchTerm)}&category=${category}`
-      );
-      const data = await response.json();
-      onSearch(data.results, searchTerm,selectedCategory);
-    } catch (error) {
-      console.error("Search failed:", error);
-      onSearch([], searchTerm);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+// components/SearchBar.jsx
+const handleSearch = async (searchTerm, category) => {
+  try {
+    setIsLoading(true);
+    const response = await fetch('/python/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        query: searchTerm,
+        category: category
+      })
+    });
+    const data = await response.json();
+    onSearch(data.results, searchTerm, category);
+  } catch (error) {
+    console.error("Search failed:", error);
+    onSearch([], searchTerm);
+  } finally {
+    setIsLoading(false);
+  }
+};
+
 
   const debouncedSearch = (term, category) => {
     clearTimeout(searchTimeout.current);
