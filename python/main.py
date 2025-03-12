@@ -24,13 +24,13 @@ logger = logging.getLogger(__name__)
 app = FastAPI()
 
 # Configure CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with actual origins
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=["*"],  # In production, replace with actual origins
+#     allow_credentials=True,
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )
 
 QDRANT_URL = os.getenv("QDRANT_URL", "https://0eb2bc77-f3ea-4351-b6d5-4cb07cf499e9.europe-west3-0.gcp.cloud.qdrant.io")
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIiwiZXhwIjoxNzQyMDgxMjcwfQ.CJIiGHpCopMYIr9B_gIlkulaJkazq5Y_YXNHxMxCMtk")
@@ -43,10 +43,7 @@ client = QdrantClient(
 model = SentenceTransformer('all-MiniLM-L6-v2')
 
 # Zoom API configuration
-ZOOM_API_KEY = os.getenv("ZOOM_API_KEY", "your_zoom_api_key")
-ZOOM_API_SECRET = os.getenv("ZOOM_API_SECRET", "zDVYd0MjN1awSDAdqw9Un0sbAem4wWFf")
-ZOOM_ACCOUNT_ID = os.getenv("ZOOM_ACCOUNT_ID", "Tn6CeQOaS2-3bXa1_sIyKw")
-GEMINI_API_KEY = "AIzaSyBru5qfjU7IYRrLNOL-FiQrBjG1mO-w2aQ"
+
 
 # Configure Gemini API
 genai.configure(api_key=GEMINI_API_KEY)
@@ -115,37 +112,44 @@ async def startup_event():
         logger.error(f"Error during startup: {e}")
 
 @app.post("/api/create-zoom-session")
+@app.post("/api/create-zoom-session")
 async def create_zoom_session(request: ZoomSessionRequest):
-    print("found")
     # Generate a unique session ID
     session_id = str(uuid.uuid4())
-    
+    ZOOM_API_KEY = os.getenv("ZOOM_API_KEY", "zDVYd0MjN1awSDAdqw9Un0sbAem4wWFf")
+    ZOOM_ACCOUNT_ID = os.getenv("ZOOM_ACCOUNT_ID", "Tn6CeQOaS2-3bXa1_sIyKw")
+    GEMINI_API_KEY = "AIzaSyBru5qfjU7IYRrLNOL-FiQrBjG1mO-w2aQ"
     try:
-        # Get Zoom API credentials
-        zoom_api_key = os.getenv("ZOOM_API_KEY")
-        zoom_api_secret = os.getenv("ZOOM_API_SECRET")
+        # Get Zoom API credentials from environment variables
         
-        if not zoom_api_key or not zoom_api_secret:
-            raise ValueError("Zoom API credentials not configured")
-        
-        # Use Gemini to generate Zoom API request structure
-        prompt = f"""
-        I need to create a Zoom meeting with the following details:
-        - Title: {request.title}
-        - Duration: {request.duration} minutes
-        
-        Please provide the exact JSON payload I should send to the Zoom API endpoint POST /v2/users/me/meetings.
-        Return only the JSON with no explanation.
-        """
-        
-        # Generate Zoom API request payload with Gemini
-        gemini_response = model.generate_content(prompt)
-        
-        try:
-            # Extract JSON from Gemini response
-            zoom_request_payload = json.loads(gemini_response.text)
-        except json.JSONDecodeError:
-            # Fall back to a simple payload if Gemini doesn't return valid JSON
+        if not all([ZOOM_API_KEY, ZOOM_API_KEY, zoom_account_id]):
+            raise HTTPException(
+                status_code=500,
+                detail="Zoom API credentials not configured properly"
+            )
+
+        # Generate Zoom API access token
+        async with httpx.AsyncClient() as client_http:
+            # Get OAuth token using Server-to-Server credentials
+            auth_response = await client_http.post(
+                "https://zoom.us/oauth/token",
+                params={
+                    "grant_type": "account_credentials",
+                    "account_id": ZOOM_ACCOUNT_ID
+                },
+                auth=(ZOOM_ACCOUNT_ID, ZOOM_API_KEY)
+            )
+
+            if auth_response.status_code != 200:
+                raise HTTPException(
+                    status_code=auth_response.status_code,
+                    detail="Zoom authentication failed"
+                )
+
+            auth_data = auth_response.json()
+            access_token = auth_data.get("access_token")
+
+            # Create Zoom meeting payload
             zoom_request_payload = {
                 "topic": request.title,
                 "type": 2,  # Scheduled meeting
@@ -154,45 +158,30 @@ async def create_zoom_session(request: ZoomSessionRequest):
                     "host_video": True,
                     "participant_video": True,
                     "join_before_host": True,
-                    "mute_upon_entry": False,
                     "auto_recording": "cloud",
                     "waiting_room": False
                 }
             }
-        
-        # Generate JWT token for Zoom API authentication
-        async with httpx.AsyncClient() as client_http:
-            # Get Zoom JWT token (simplified - implement proper JWT generation)
-            auth_response = await client_http.post(
-                "https://zoom.us/oauth/token",
-                auth=( zoom_api_secret),
-                data={"grant_type": "client_credentials", "account_id": os.getenv("ZOOM_ACCOUNT_ID")}
-            )
-            auth_data = auth_response.json()
-            access_token = auth_data.get("access_token")
-            
-            # Create Zoom meeting using the payload from Gemini
-            headers = {
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json"
-            }
-            
-            # Real Zoom API call
+
+            # Create Zoom meeting
             zoom_api_response = await client_http.post(
                 "https://api.zoom.us/v2/users/me/meetings",
-                headers=headers,
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json"
+                },
                 json=zoom_request_payload
             )
-            
-            if not zoom_api_response.is_success:
+
+            if zoom_api_response.status_code != 201:
                 raise HTTPException(
                     status_code=zoom_api_response.status_code,
                     detail=f"Zoom API Error: {zoom_api_response.text}"
                 )
-            
+
             zoom_response = zoom_api_response.json()
-        
-        # Store initial meeting data in Qdrant
+
+        # Store meeting data in Qdrant
         embedding = model.encode(request.title).tolist()
         
         client.upsert(
@@ -222,9 +211,14 @@ async def create_zoom_session(request: ZoomSessionRequest):
             "meeting_id": zoom_response["id"]
         }
         
+    except HTTPException as he:
+        raise he
     except Exception as e:
-        logger.error(f"Error creating Zoom session: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to create Zoom session: {str(e)}")
+        logger.error(f"Error creating Zoom session: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create Zoom session. Please check server logs."
+        )
 
 @app.post("/api/update-transcript")
 async def update_transcript(request: TranscriptUpdateRequest):
