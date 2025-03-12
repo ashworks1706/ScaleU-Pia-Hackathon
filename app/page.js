@@ -146,14 +146,17 @@ function HeroSection() {
           >
             Explore Features
           </motion.a>
-          <motion.a
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            href="/register"
-            className="px-6 py-3 rounded-lg flex items-center gap-2 bg-gray-800 text-white hover:bg-gray-700 transition-all shadow-lg"
-          >
-            Get Started <span className="ml-2">→</span>
-          </motion.a>
+
+          {/* Replace the <a> tag with <SignInButton> */}
+          <SignInButton>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="px-6 py-3 rounded-lg flex items-center gap-2 bg-gray-800 text-white hover:bg-gray-700 transition-all shadow-lg"
+            >
+              Get Started <span className="ml-2">→</span>
+            </motion.button>
+          </SignInButton>
         </motion.div>
       </motion.div>
 
@@ -237,8 +240,7 @@ function VideoSection() {
   return (
     <section id="videos" className="py-16 bg-black">
       <div className="container mx-auto px-4">
-      
-       
+        {/* Video content goes here */}
       </div>
     </section>
   );
