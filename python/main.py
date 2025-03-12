@@ -378,6 +378,7 @@ def upload_recording(session_id):
             os.remove(canvas_path)
             public_url = supabase.storage.from_("temp_canvas").get_public_url(f"{session_id}.webm")
             video_url = public_url
+            video_url = video_url.replace("?", "")
             # Update the document to add the video_url attribute.
             client.set_payload(
                 collection_name="videos",

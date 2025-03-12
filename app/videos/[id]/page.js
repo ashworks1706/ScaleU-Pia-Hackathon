@@ -42,7 +42,8 @@ export default function VideoView() {
   if (error) return <div className="p-4">Error: {error}</div>;
 
   // If a link exists, check if it is a YouTube link.
-  const youtubeId = video.link ? isYouTubeUrl(video.link) : null;
+
+  const youtubeId = video.link ? isYouTubeUrl(video.link) : video.link;
   console.log(youtubeId)
 
   return (
