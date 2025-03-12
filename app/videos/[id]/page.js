@@ -27,7 +27,6 @@ export default function VideoView() {
             throw new Error(errText || "Failed to fetch video data");
             }
             const data = await res.json();
-            console.log(data)
         setVideo(data);
       } catch (err) {
         setError(err.message);
@@ -44,7 +43,6 @@ export default function VideoView() {
   // If a link exists, check if it is a YouTube link.
 
   const youtubeId = video.link ? isYouTubeUrl(video.link) : video.link;
-  console.log(youtubeId)
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -55,8 +53,8 @@ export default function VideoView() {
           youtubeId ? (
             <div className="embed-responsive embed-responsive-16by9">
               <iframe
-                className="w-full h-64 rounded-md"
-                src={youtubeId}
+                className="w-full aspect-video h-auto rounded-md"
+                src={`https://www.youtube.com/embed/${youtubeId}`}
                 width={560}
                 height={315}
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"

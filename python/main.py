@@ -138,7 +138,7 @@ def complete_session():
             "completed_at": int(time.time())
         }
 
-        # Update the session’s payload in the 'videos' collection
+        # Update the session's payload in the 'videos' collection
         client.set_payload(
             collection_name="videos",
             points=[session_id],
@@ -209,6 +209,21 @@ def enhanced_search():
             limit=100
         )
 
+        if (query == ""):
+            # Convert Record objects to dictionaries before returning
+            processed_videos = []
+            for video in all_videos:
+                processed_videos.append({
+                    "title": video.payload.get("title", ""),
+                    "category": video.payload.get("category", ""),
+                    "upvotes": video.payload.get("upvotes", 0),
+                    "link": video.payload.get("link", ""),
+                    "video_url": video.payload.get("video_url", ""),
+                    "transcript": video.payload.get("transcript", ""),
+                    "status": video.payload.get("status", "")
+                })
+            return jsonify({"results": processed_videos}), 200
+
         if len(all_videos) < 10:
             processed = []
             for video in all_videos:
@@ -226,7 +241,7 @@ def enhanced_search():
 
         # Otherwise, proceed with enhanced search algorithm
         try:
-            prompt = f"""Generate 4 search query variations for: "{query}".Return ONLY a JSON array without any formatting: ["query1", "query2", "query3", "query4"]"""
+            prompt = f"""Generate 4 search query variations for: "{query}".Return ONLY a JSON array without any, no backticks, no extra text, just the array: ["query1", "query2", "query3", "query4"]"""
             response = gemini_model.generate_content(prompt)
             if response and response.candidates:
                 raw_response = response.candidates.content.parts.text
@@ -448,25 +463,31 @@ def incremental_transcript(session_id):
 def get_video_document(session_id):
     try:
         # First, try to retrieve the document by its ID.
-        results = client.retrieve(
-            collection_name="videos",
-            ids=[session_id],
-            with_payload=True
-        )
-        # Check if the document exists
-        if results and len(results) > 0:
-            video = results[0]
-            # If the document's link is present, return it immediately.
-            if video.payload.get("link", ""):
-                return jsonify({
-                    "title": video.payload.get("title", ""),
-                    "link": video.payload.get("video_url", ""),
-                    "transcript": video.payload.get("transcript", ""),
-                    "status": video.payload.get("status", "")
-                }), 200
+        # Check if the session_id is a valid UUID format
+        try:
+            uuid_obj = uuid.UUID(session_id)
+            results = client.retrieve(
+                collection_name="videos",
+                ids=[session_id],
+                with_payload=True
+            )
+            # Check if the document exists
+            if results and len(results) > 0:
+                video = results[0]
+                # If the document's link is present, return it immediately.
+                if video.payload.get("link", ""):
+                    return jsonify({
+                        "title": video.payload.get("title", ""),
+                        "link": video.payload.get("video_url", ""),
+                        "transcript": video.payload.get("transcript", ""),
+                        "status": video.payload.get("status", "")
+                    }), 200
+        except (ValueError, Exception) as e:
+            # If session_id is not a valid UUID or retrieval fails, continue to alternative search
+            logger.info(f"Direct retrieval failed or invalid UUID: {str(e)}")
+            pass
 
-        # If retrieval by ID fails or the link field is empty,
-        # then use scroll to look for a document whose link field matches "/vidio/{session_id}".
+        # Use scroll to look for a document whose link field matches "/videos/{session_id}".
         alt_filter = rest_models.Filter(
             must=[
                 rest_models.FieldCondition(
@@ -475,7 +496,7 @@ def get_video_document(session_id):
                 )
             ]
         )
-        # Use scroll_filter (not query_filter) with the constructed filter.
+        # Use scroll_filter with the constructed filter.
         alt_results, _ = client.scroll(
             collection_name="videos",
             with_payload=True,

@@ -83,19 +83,33 @@ const [finalVideoURL, setFinalVideoURL] = useState("")
   // Initialize PieSocket connection and subscribe to the session channel
   useEffect(() => {
     if (!id) return;
+    
+    console.log("Initializing PieSocket connection for session:", id);
     const pieSocket = new PieSocket({
       clusterId: "s14271.nyc1",
       apiKey: "uOkCOHkUVs4zhG89vWqp2CnM9i7dKdrbtG1Z3Lqw",
       notifySelf: true,
     });
+    
     // Save the PieSocket instance so we can later unsubscribe
     pieSocketRef.current = pieSocket;
+    
+    // Add a timeout for connection attempts
+    const connectionTimeout = setTimeout(() => {
+      if (!wsConnected) {
+        setConnectionError("Connection timed out. Please refresh the page.");
+      }
+    }, 10000); // 10 seconds timeout
+    
     pieSocket
       .subscribe(`session-${id}`)
       .then((channel) => {
+        clearTimeout(connectionTimeout);
         channelRef.current = channel;
         setWsConnected(true);
         setConnectionError(null);
+        console.log("Successfully connected to PieSocket channel");
+        
         // Process any pending messages
         while (pendingChanges.current.length > 0) {
           const message = pendingChanges.current.shift();
@@ -179,6 +193,9 @@ const [finalVideoURL, setFinalVideoURL] = useState("")
         console.error("Canvas element not found");
         return { canvasRecorder: null, audioRecorder: null };
       }
+      
+      // Ensure we get a consistent frame rate
+      const frameRate = 30;
       let lastFrameTime = Date.now();
       const syncTimestamps = () => {
         const now = Date.now();
@@ -186,37 +203,47 @@ const [finalVideoURL, setFinalVideoURL] = useState("")
         lastFrameTime = now;
         return timeDiff;
       };
+      
       let canvasStream;
       try {
-        canvasStream = canvas.captureStream(30);
-        console.log("Canvas stream created")
-        if (!canvasStream) {
-          throw new Error("Failed to capture canvas stream");
+        // Try with explicit frameRate parameter
+        canvasStream = canvas.captureStream(frameRate);
+        console.log("Canvas stream created with frameRate:", frameRate);
+
+        if (!canvasStream || canvasStream.getVideoTracks().length === 0) {
+          console.error("Canvas stream has no video tracks");
+          throw new Error("Failed to capture canvas stream properly");
         }
       } catch (err) {
         console.error("Canvas stream error:", err);
         return { canvasRecorder: null, audioRecorder: null };
       }
+      
+      // Use more compatible codec options
       const canvasRecorder = new MediaRecorder(canvasStream, {
-        mimeType: "video/webm;codecs=vp9",
+        mimeType: "video/webm;codecs=vp8", // Changed to vp8 for better compatibility
         videoBitsPerSecond: 2500000,
       });
+      
       const canvasChunks = [];
       canvasRecorder.ondataavailable = (e) => {
-        const syncData = new DataView(new ArrayBuffer(4));
-        syncData.setUint32(0, syncTimestamps());
-        const syncChunk = new Blob([syncData], {
-          type: "application/octet-stream",
-        });
-        canvasChunks.push(e.data);
-        canvasChunks.push(syncChunk);
-        console.log("pushde canvas chunks")
+        if (e.data && e.data.size > 0) { // Verify data exists and has content
+          canvasChunks.push(e.data);
+          console.log("Canvas chunk added, size:", e.data.size);
+        }
       };
+      
       canvasRecorder.onstop = async () => {
-        console.log("onstop canvas chunks")
-        const canvasBlob = new Blob(canvasChunks, { type: "video/webm" });
-        await uploadRecording(canvasBlob, "canvas");
+        console.log("Canvas recorder stopped, chunks:", canvasChunks.length);
+        if (canvasChunks.length > 0) {
+          const canvasBlob = new Blob(canvasChunks, { type: "video/webm" });
+          console.log("Canvas recording size:", canvasBlob.size);
+          await uploadRecording(canvasBlob, "canvas");
+        } else {
+          console.error("No canvas chunks recorded");
+        }
       };
+      
       let audioRecorder = null;
       if (audioStreamRef.current) {
         audioRecorder = new MediaRecorder(audioStreamRef.current);
@@ -248,22 +275,40 @@ const [finalVideoURL, setFinalVideoURL] = useState("")
   // Initialize media recording when whiteboard is ready
   useEffect(() => {
     if (!whiteboardReady) return;
+    
     const initMedia = async () => {
       try {
+        setRecordingStatus("initializing");
         const { canvasRecorder, audioRecorder } = setupCanvasRecording();
+        
         if (canvasRecorder) {
           combinedRecorderRef.current = {
             canvas: canvasRecorder,
             audio: audioRecorder,
           };
           console.log("Recording successfully initialized");
+          setRecordingStatus("recording");
+          
+          // Notify other participants that recording has started
+          if (isHost && wsConnected) {
+            const now = new Date();
+            send({
+              type: "recording",
+              payload: { is_recording: true, timestamp: now.toISOString() },
+            });
+          }
+        } else {
+          setRecordingStatus("failed");
+          console.error("Failed to initialize recorders");
         }
       } catch (error) {
         console.error("Media initialization error:", error);
+        setRecordingStatus("failed");
       }
     };
+    
     initMedia();
-  }, [whiteboardReady, setupCanvasRecording]);
+  }, [whiteboardReady, setupCanvasRecording, isHost, wsConnected, send]);
 
   // Updated uploadRecording function with additional error details
   const uploadRecording = async (blob, type) => {
@@ -272,17 +317,24 @@ const [finalVideoURL, setFinalVideoURL] = useState("")
       formData.append(type, blob, `${id}_${type}.webm`);
       // For canvas recordings, send to the dedicated backend endpoint
       if (type === "canvas") {
-        console.log(" Posting recordings data ")
+        console.log("Posting recordings data, size:", blob.size);
         const response = await fetch(`/python/recordings/${id}`, {
           method: "POST",
           body: formData,
         });
-        console.log("Recordings data response")
+        console.log("Recordings data response status:", response.status);
         if (!response.ok) {
           const errorText = await response.text();
           throw new Error(
             `Server responded with status ${response.status}: ${errorText}`
           );
+        }
+        
+        // Update finalVideoURL after successful upload
+        const data = await response.json();
+        if (data.video_url) {
+          setFinalVideoURL(data.video_url);
+          console.log("Set final video URL:", data.video_url);
         }
       }
     } catch (error) {
@@ -363,12 +415,23 @@ const [finalVideoURL, setFinalVideoURL] = useState("")
 
   // Handle whiteboard changes with debouncing
   const handleWhiteboardChange = useDebounce((elements, appState, files) => {
+    if (!elements) {
+      console.warn("Received empty whiteboard elements");
+      return;
+    }
+    
+    console.log("Whiteboard changed, elements count:", elements.length);
     const change = {
       type: "whiteboard",
-      payload: { elements, appState, files },
+      payload: { elements, appState, files, timestamp: Date.now() },
     };
+    
     if (wsConnected) {
-      send(change);
+      const sent = send(change);
+      if (!sent) {
+        console.warn("Failed to send whiteboard update, queuing");
+        pendingChanges.current.push(change);
+      }
     } else {
       console.warn("WebSocket not connected, queuing whiteboard changes");
       pendingChanges.current.push(change);
@@ -612,7 +675,10 @@ const [finalVideoURL, setFinalVideoURL] = useState("")
                     <Chip variant="flat" color="warning" size="sm">
                       {mediaState.isRecording
                         ? `Recording - Last saved: ${
-                            mediaState.lastSaved?.toLocaleTimeString() ||
+                            mediaState.lastSaved ? 
+                            (typeof mediaState.lastSaved.toLocaleTimeString === 'function' ? 
+                              mediaState.lastSaved.toLocaleTimeString() : 
+                              "Invalid date") : 
                             "Never"
                           }`
                         : "Paused"}
