@@ -3,32 +3,40 @@ import { Excalidraw } from "@excalidraw/excalidraw";
 import { forwardRef, useImperativeHandle, useEffect } from "react";
 import "@excalidraw/excalidraw/index.css";
 import { useRef } from "react";
-
 const ExcalidrawWrapper = forwardRef(({ initialData, onChange }, ref) => {
   const excalidrawRef = useRef(null);
+  const canvasRef = useRef(null);
 
-  // Add initial data load
+  // Add canvas reference
   useEffect(() => {
-    if (initialData && excalidrawRef.current) {
-      excalidrawRef.current.updateScene(initialData);
+    if (excalidrawRef.current) {
+      canvasRef.current = excalidrawRef.current.getCanvas();
     }
-  }, [initialData]);
+  }, []);
 
   useImperativeHandle(ref, () => ({
-    getCanvas: () => excalidrawRef.current?.getCanvas(),
+    getCanvas: () => canvasRef.current,
     exportDrawing: () => excalidrawRef.current?.getSceneElements(),
-    getExcalidrawAPI: () => excalidrawRef.current
+    getExcalidrawAPI: () => excalidrawRef.current,
+    destroy: () => {
+      if (excalidrawRef.current) {
+        excalidrawRef.current.destroy();
+        canvasRef.current = null;
+      }
+    }
   }));
 
   return (
-    <div className="w-full h-full" style={{ height: '600px' }}> {/* Add fixed height */}
+    <div className="w-full h-full" style={{ height: '600px' }}>
       <Excalidraw
         ref={excalidrawRef}
         initialData={initialData}
-        onChange={onChange}
-        theme="dark"  // Force dark theme
+        onChange={(elements, appState) => {
+          // Add debounce directly here
+          onChange?.(elements, appState);
+        }}
+        theme="dark"
       />
     </div>
   );
 });
-export default ExcalidrawWrapper

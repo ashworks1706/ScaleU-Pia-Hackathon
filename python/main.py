@@ -97,22 +97,6 @@ def create_session():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# In /python/update-transcript
-@app.route('/python/update-transcript', methods=['POST'])
-def update_transcript():
-    try:
-        data = request.get_json()
-        client.set_payload(
-            collection_name="videos",
-            points=[data['session_id']],  # Add this
-            payload={"transcript": data['transcript']}
-        )
-        return jsonify({"status": "success"}), 200
-        
-    except Exception as e:
-        logger.error(f"Transcript update failed: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-
 
 @app.route('/python/sessions/<session_id>', methods=['GET'])
 def get_session(session_id):
@@ -160,8 +144,6 @@ def complete_session():
         logger.error(f"Session completion failed: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-
-
 def process_transcript_chunks(session_id: str, transcript: str):
     try:
         video = client.retrieve(
@@ -202,39 +184,6 @@ def chunk_transcript(transcript: str, window_size: int = 2) -> list:
         for i in range(len(sentences))
     ]
 
-
-# Update your backend recording endpoint
-@app.route('/python/recordings/<session_id>', methods=['POST'])
-def upload_recording(session_id):
-    try:
-        file = request.files['file']
-        temp_video = f"temp_{session_id}.webm"
-        file.save(temp_video)
-        
-        # Process recording and get transcript
-        transcript = process_recording(temp_video, temp_video)  # Same file contains both
-        
-        # Update Qdrant with transcript
-        client.set_payload(
-            collection_name="videos",
-            points=[session_id],
-            payload={
-                "transcript": transcript,
-                "status": "processed"
-            }
-        )
-        
-        # Upload to Supabase
-        path = f"processed_{session_id}.webm"
-        with open(f"processed_{temp_video}", 'rb') as f:
-            res = supabase.storage().from_("recordings").upload(path, f)
-            
-        url = supabase.storage().from_("recordings").get_public_url(path)
-        
-        return jsonify({"url": url}), 200
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 @app.route('/python/search', methods=['POST'])
 def enhanced_search():
@@ -346,26 +295,127 @@ def add_cors_headers(response):
     response.headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,DELETE,OPTIONS'
     return response
 
-# Update process_recording
-def process_recording(video_path):
+# Modify process_recording function
+def process_recording(video_path, audio_path):
     try:
         video_clip = VideoFileClip(video_path)
-        audio_clip = video_clip.audio
-        final_clip = video_clip.set_audio(audio_clip)
+        audio_clip = AudioFileClip(audio_path)
         
-        output_path = f"processed_{video_path}"
-        final_clip.write_videofile(output_path, codec='libvpx', audio_codec='libvorbis')
+        # Synchronize durations
+        final_duration = min(video_clip.duration, audio_clip.duration)
+        final_clip = video_clip.subclip(0, final_duration)
+        final_clip = final_clip.set_audio(audio_clip.subclip(0, final_duration))
         
-        # Generate transcript
-        r = sr.Recognizer()
-        with video_clip.audio.to_audiofile(f"temp_{video_path}.wav") as source:
-            audio = r.record(source)
-            transcript = r.recognize_google(audio)
-            
-        return transcript
+        output_path = f"merged_{os.path.basename(video_path)}"
+        final_clip.write_videofile(output_path, codec='libvpx', 
+                                 audio_codec='libvorbis',
+                                 threads=4)
+        return output_path
     except Exception as e:
-        logger.error(f"Processing error: {str(e)}")
+        logger.error(f"Merging failed: {str(e)}")
         raise
+# MODIFY process_transcript TO HANDLE INCREMENTAL UPDATES
+def process_transcript(audio_path: str) -> str:
+    try:
+        r = sr.Recognizer()
+        with sr.AudioFile(audio_path) as source:
+            audio = r.record(source)
+            return r.recognize_google(audio)
+    except Exception as e:
+        logger.error(f"Transcription failed: {str(e)}")
+        return ""
+
+@app.route('/python/recordings/<session_id>', methods=['POST'])
+def upload_recording(session_id):
+    try:
+        # Handle both files in single endpoint
+        canvas_file = request.files.get('canvas')
+        audio_file = request.files.get('audio')
+        
+        # Immediately process audio for transcript
+        if audio_file:
+            audio_path = f"temp_{session_id}.webm"
+            audio_file.save(audio_path)
+            transcript = process_transcript(audio_path)  # Use existing function
+            os.remove(audio_path)
+            
+            # Update transcript incrementally
+            current = client.retrieve("videos", [session_id])[0].payload.get("transcript", "")
+            client.set_payload(
+                collection_name="videos",
+                points=[session_id],
+                payload={"transcript": f"{current}\n{transcript}"}
+            )
+
+        # Handle canvas separately
+        if canvas_file:
+            canvas_path = f"temp_{session_id}_canvas.webm"
+            canvas_file.save(canvas_path)
+            # Store canvas temporarily for later merge
+            supabase.storage().from_("temp_canvas").upload(
+                f"{session_id}.webm", 
+                open(canvas_path, 'rb')
+            )
+            os.remove(canvas_path)
+
+        return jsonify({"status": "processed"}), 200
+
+    except Exception as e:
+        logger.error(f"Recording error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+def merge_recordings(canvas_path, audio_path):
+    try:
+        video_clip = VideoFileClip(canvas_path)
+        audio_clip = AudioFileClip(audio_path)
+        
+        # Synchronize durations
+        final_duration = min(video_clip.duration, audio_clip.duration)
+        final_clip = video_clip.subclip(0, final_duration)
+        final_clip = final_clip.set_audio(audio_clip.subclip(0, final_duration))
+        
+        output_path = f"merged_{session_id}.webm"
+        final_clip.write_videofile(output_path, 
+                                 codec='libvpx', 
+                                 audio_codec='libvorbis',
+                                 threads=4,
+                                 preset='ultrafast')
+        return output_path
+    finally:
+        # Cleanup
+        for path in [canvas_path, audio_path]:
+            if os.path.exists(path):
+                os.remove(path)
+
+@app.route('/python/update-transcript/<session_id>', methods=['PATCH'])
+def incremental_transcript(session_id):
+    try:
+        audio_chunk = request.get_data()
+        
+        # Convert chunk to text
+        r = sr.Recognizer()
+        with open(f"temp_{session_id}.wav", "wb") as f:
+            f.write(audio_chunk)
+            
+        with sr.AudioFile(f"temp_{session_id}.wav") as source:
+            audio = r.record(source)
+            new_text = r.recognize_google(audio)
+            
+        # Get existing transcript
+        current = client.retrieve("videos", [session_id])[0].payload.get("transcript", "")
+        
+        # Update Qdrant
+        client.set_payload(
+            collection_name="videos",
+            points=[session_id],
+            payload={"transcript": f"{current}\n{new_text}"}
+        )
+        
+        return jsonify({"status": "updated"}), 200
+        
+    except Exception as e:
+        logger.error(f"Incremental transcript failed: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 
 

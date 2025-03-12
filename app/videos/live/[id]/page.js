@@ -53,6 +53,7 @@ function useDebounce(callback, delay) {
 
 export default function LiveSession() {
   const combinedRecorderRef = useRef(null);
+  const excalidrawRef = useRef(null);
 
   const [recordingStatus, setRecordingStatus] = useState("recording");
   const { userId } = useAuth();
@@ -79,7 +80,110 @@ export default function LiveSession() {
   const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 5;
   const pendingChanges = useRef([]);
-
+  // LiveSession.jsx (Frontend) - Critical Modifications
+const setupCanvasRecording = () => {
+    if (!excalidrawRef.current) {
+        console.error("Excalidraw ref not available");
+        return;
+      }
+    
+      const canvas = excalidrawRef.current.getCanvas();
+      if (!canvas) {
+        console.error("Canvas element not found");
+        return;
+      }
+    
+      // Add timestamp synchronization
+      let lastFrameTime = Date.now();
+      const syncTimestamps = () => {
+        const now = Date.now();
+        const timeDiff = now - lastFrameTime;
+        lastFrameTime = now;
+        return timeDiff;
+      };
+    
+      const canvasStream = canvas.captureStream(30);
+      const canvasRecorder = new MediaRecorder(canvasStream, {
+        mimeType: 'video/webm;codecs=vp9',
+        videoBitsPerSecond: 2500000
+      });
+    
+      // Add frame metadata
+      const canvasChunks = [];
+      canvasRecorder.ondataavailable = (e) => {
+        const syncData = new DataView(new ArrayBuffer(4));
+        syncData.setUint32(0, syncTimestamps());
+        const syncChunk = new Blob([syncData], {type: 'application/octet-stream'});
+        
+        canvasChunks.push(e.data);
+        canvasChunks.push(syncChunk);
+      };
+    
+    canvasRecorder.onstop = async () => {
+      const canvasBlob = new Blob(canvasChunks, { type: 'video/webm' });
+      await uploadRecording(canvasBlob, 'canvas');
+    };
+  
+    // Audio recorder setup (modified)
+    const audioRecorder = new MediaRecorder(audioStream);
+    const audioChunks = [];
+    audioRecorder.ondataavailable = (e) => {
+      audioChunks.push(e.data);
+      // Send audio chunk every 60s for transcription
+      if (Date.now() - lastTranscriptUpdate > 60000) {
+        const chunk = new Blob([e.data], {type: 'audio/webm'});
+        updateTranscript(chunk);
+        lastTranscriptUpdate = Date.now();
+      }
+    };
+  
+    // Start both recorders
+    canvasRecorder.start(1000); // 1s chunks for smoother recording
+    audioRecorder.start(1000);
+    
+    return { canvasRecorder, audioRecorder };
+  };
+  
+  // Add to media initialization
+  useEffect(() => {
+    const initMedia = async () => {
+      const { canvasRecorder, audioRecorder } = setupCanvasRecording();
+      
+      combinedRecorderRef.current = {
+        canvas: canvasRecorder,
+        audio: audioRecorder
+      };
+    };
+    initMedia();
+  }, []);
+  
+  // Modified upload function
+  const uploadRecording = async (blob, type) => {
+    const formData = new FormData();
+    formData.append(type, blob, `${id}_${type}.webm`);
+    
+    if (type === 'canvas') {
+      // Only upload canvas immediately
+      await fetch(`/python/recordings/${id}`, {
+        method: 'POST',
+        body: formData
+      });
+    }
+  };
+  
+  // Transcript updates
+  const updateTranscript = async (chunk) => {
+    try {
+      const response = await fetch(`/python/update-transcript/${id}`, {
+        method: 'PATCH',
+        body: chunk
+      });
+      if (!response.ok) throw new Error('Transcript update failed');
+    } catch (error) {
+      console.error('Transcript error:', error);
+    }
+  };
+  
   // WebSocket initialization and management
   const initializeWebSocket = useCallback(() => {
     if (ws.current?.readyState === WebSocket.OPEN) return;
@@ -212,23 +316,7 @@ export default function LiveSession() {
     ws.current = socket;
   }, [userId]);
 
-  const uploadRecording = useCallback(async (blob) => {
-    try {
-      const formData = new FormData();
-      formData.append("file", blob, `${id}_combined.webm`);
 
-      const response = await fetch(`/python/recordings/${id}`, {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) throw new Error("Upload failed");
-      return await response.json();
-    } catch (error) {
-      console.error("Upload error:", error);
-      throw error;
-    }
-  });
 
   // Session initialization
   useEffect(() => {
@@ -409,6 +497,9 @@ export default function LiveSession() {
     }
   }, [votes, poll, id]);
 
+
+
+  
   // Rest of the component remains similar with these UI additions:
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800">
@@ -462,9 +553,10 @@ export default function LiveSession() {
                 )}
                 {/* <div className="flex w-full text-sm text-center "> */}
                 <Whiteboard
-                  initialData={whiteboardData}
-                  onChange={handleWhiteboardChange}
-                />
+  ref={excalidrawRef}
+  initialData={whiteboardData}
+  onChange={handleWhiteboardChange}
+/>
 
                 {/* </div> */}
               </CardBody>
