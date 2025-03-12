@@ -78,7 +78,7 @@ export default function NavbarSection() {
 
   return (
     <>
-      <Navbar className="bg-black h-16" onMenuOpenChange={setIsMenuOpen}>
+      <Navbar className=" h-16" onMenuOpenChange={setIsMenuOpen}>
         <NavbarContent>
           <NavbarMenuToggle
             aria-label={isMenuOpen ? "Close menu" : "Open menu"}

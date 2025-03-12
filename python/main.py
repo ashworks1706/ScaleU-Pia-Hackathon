@@ -22,15 +22,16 @@ logger = logging.getLogger(__name__)
 
 # Initialize FastAPI app
 app = FastAPI()
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyBru5qfjU7IYRrLNOL-FiQrBjG1mO-w2aQ")
 
 # Configure CORS
-# app.add_middleware(
-#     CORSMiddleware,
-#     allow_origins=["*"],  # In production, replace with actual origins
-#     allow_credentials=True,
-#     allow_methods=["*"],
-#     allow_headers=["*"],
-# )
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, replace with actual origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 QDRANT_URL = os.getenv("QDRANT_URL", "https://0eb2bc77-f3ea-4351-b6d5-4cb07cf499e9.europe-west3-0.gcp.cloud.qdrant.io")
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIiwiZXhwIjoxNzQyMDgxMjcwfQ.CJIiGHpCopMYIr9B_gIlkulaJkazq5Y_YXNHxMxCMtk")
@@ -40,7 +41,7 @@ client = QdrantClient(
     url=QDRANT_URL,
     api_key=QDRANT_API_KEY,
 )
-model = SentenceTransformer('all-MiniLM-L6-v2')
+embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
 
 # Zoom API configuration
 
@@ -68,7 +69,6 @@ model = genai.GenerativeModel(
 )
 
 # Gemini API configuration
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyBru5qfjU7IYRrLNOL-FiQrBjG1mO-w2aQ")
 
 # Models
 class ZoomSessionRequest(BaseModel):
@@ -103,6 +103,16 @@ async def startup_event():
                 )
             )
             logger.info("'videos' collection created successfully")
+        if "video_chunks" not in collection_names:
+            logger.info("Creating 'video_chunks' collection in Qdrant Cloud")
+            client.create_collection(
+                collection_name="video_chunks",
+                vectors_config=rest_models.VectorParams(
+                    size=384,  # Size for all-MiniLM-L6-v2
+                    distance=rest_models.Distance.COSINE
+                )
+            )
+            logger.info("'videos' collection created successfully")
         
         # Rest of the function remains the same
         
@@ -112,17 +122,15 @@ async def startup_event():
         logger.error(f"Error during startup: {e}")
 
 @app.post("/api/create-zoom-session")
-@app.post("/api/create-zoom-session")
 async def create_zoom_session(request: ZoomSessionRequest):
     # Generate a unique session ID
     session_id = str(uuid.uuid4())
     ZOOM_API_KEY = os.getenv("ZOOM_API_KEY", "zDVYd0MjN1awSDAdqw9Un0sbAem4wWFf")
     ZOOM_ACCOUNT_ID = os.getenv("ZOOM_ACCOUNT_ID", "Tn6CeQOaS2-3bXa1_sIyKw")
-    GEMINI_API_KEY = "AIzaSyBru5qfjU7IYRrLNOL-FiQrBjG1mO-w2aQ"
     try:
         # Get Zoom API credentials from environment variables
         
-        if not all([ZOOM_API_KEY, ZOOM_API_KEY, zoom_account_id]):
+        if not all([ZOOM_API_KEY, ZOOM_API_KEY, ZOOM_ACCOUNT_ID]):
             raise HTTPException(
                 status_code=500,
                 detail="Zoom API credentials not configured properly"
@@ -130,15 +138,15 @@ async def create_zoom_session(request: ZoomSessionRequest):
 
         # Generate Zoom API access token
         async with httpx.AsyncClient() as client_http:
-            # Get OAuth token using Server-to-Server credentials
             auth_response = await client_http.post(
                 "https://zoom.us/oauth/token",
-                params={
+                data={
                     "grant_type": "account_credentials",
                     "account_id": ZOOM_ACCOUNT_ID
                 },
-                auth=(ZOOM_ACCOUNT_ID, ZOOM_API_KEY)
+                auth=(ZOOM_CLIENT_ID, ZOOM_CLIENT_SECRET)
             )
+
 
             if auth_response.status_code != 200:
                 raise HTTPException(
@@ -182,7 +190,7 @@ async def create_zoom_session(request: ZoomSessionRequest):
             zoom_response = zoom_api_response.json()
 
         # Store meeting data in Qdrant
-        embedding = model.encode(request.title).tolist()
+        embedding = embedding_model.encode(request.title).tolist()
         
         client.upsert(
             collection_name="videos",
@@ -193,6 +201,7 @@ async def create_zoom_session(request: ZoomSessionRequest):
                     payload={
                         "title": request.title,
                         "transcript": "",
+                        "category": request.category,
                         "upvotes": 0,
                         "link": zoom_response["join_url"],
                         "created_at": int(time.time()),
@@ -290,7 +299,7 @@ async def process_transcript_chunks(session_id: str, transcript: str):
         points = []
         for i, chunk in enumerate(chunks):
             chunk_id = f"{session_id}_{i}"
-            embedding = model.encode(chunk).tolist()
+            embedding = embedding_model.encode(chunk).tolist()
             
             points.append(
                 rest_models.PointStruct(
@@ -328,7 +337,7 @@ def chunk_transcript(transcript: str, window_size: int = 2) -> list:
 @app.get("/api/search")
 async def search_videos(q: str = Query(...)):
     # Generate query embedding
-    query_vector = model.encode(q).tolist()
+    query_vector = embedding_model.encode(q).tolist()
     
     # Hybrid search with Qdrant
     search_results = client.search(

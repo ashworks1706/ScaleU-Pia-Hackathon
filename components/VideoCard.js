@@ -1,5 +1,5 @@
 // components/VideoCard.jsx
-const VideoCard = ({ title, relevant, upvotes, link }) => (
+const VideoCard = ({ title, relevant, upvotes, link, category }) => (
   <div className="relative group border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden hover:shadow-lg transition-shadow">
     <div className="relative aspect-video bg-gray-100 dark:bg-gray-800">
       <video 
@@ -12,9 +12,14 @@ const VideoCard = ({ title, relevant, upvotes, link }) => (
       </video>
     </div>
     <div className="p-4 space-y-3 bg-white dark:bg-gray-800">
-      <h3 className="font-semibold text-lg text-gray-900 dark:text-white">
-        {title}
-      </h3>
+      <div className="flex justify-between items-start">
+        <h3 className="font-semibold text-lg text-gray-900 dark:text-white">
+          {title}
+        </h3>
+        <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full dark:bg-blue-900 dark:text-blue-200">
+          {category}
+        </span>
+      </div>
       <div 
         className="text-sm text-gray-600 dark:text-gray-300 line-clamp-3"
         dangerouslySetInnerHTML={{ __html: relevant }}
@@ -43,6 +48,7 @@ const VideoGrid = ({ videos }) => {
           title={video.title}
           relevant={video.relevant}
           upvotes={video.upvotes}
+          category={video.category}
         />
       ))}
     </div>
