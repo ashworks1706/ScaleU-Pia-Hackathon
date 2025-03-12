@@ -13,31 +13,34 @@ const SearchBar = ({ onSearch }) => {
     "Physics",
     "Biology",
     "Chemistry",
-    "Computer Science"
+    "Computer Science",
   ];
 
-// components/SearchBar.jsx
-const handleSearch = async (searchTerm, category) => {
-  try {
-    setIsLoading(true);
-    const response = await fetch('/python/search', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        query: searchTerm,
-        category: category
-      })
-    });
-    const data = await response.json();
-    onSearch(data.results, searchTerm, category);
-  } catch (error) {
-    console.error("Search failed:", error);
-    onSearch([], searchTerm);
-  } finally {
-    setIsLoading(false);
-  }
-};
+  // components/SearchBar.jsx
+  const handleSearch = async (searchTerm, category) => {
+    try {
+      setIsLoading(true);
+      const response = await fetch("/python/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: searchTerm,
+          category: category,
+        }),
+      });
+      const data = await response.json();
+      onSearch(data.results, searchTerm, category);
+    } catch (error) {
+      console.error("Search failed:", error);
+      onSearch([], searchTerm);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
+  useEffect(() => {
+    handleSearch("", "");
+  }, []);
 
   const debouncedSearch = (term, category) => {
     clearTimeout(searchTimeout.current);
@@ -57,7 +60,11 @@ const handleSearch = async (searchTerm, category) => {
   const handleCategoryChange = (e) => {
     const category = e.target.value;
     setSelectedCategory(category);
-    debouncedSearch(query, category);
+    if (category === "All") {
+      handleSearch("", "");
+    } else {
+      debouncedSearch(query, category);
+    }
   };
 
   const showSearchIcon = !query && clickPoint.current?.style.display !== "none";
@@ -69,7 +76,7 @@ const handleSearch = async (searchTerm, category) => {
         <select
           value={selectedCategory}
           onChange={handleCategoryChange}
-          className="block w-32 px-2 text-gray-900 bg-black border border-neutral-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all appearance-none"
+          className="block w-32 px-2 text-gray-200 bg-black border border-neutral-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all appearance-none"
           aria-label="Select category"
         >
           {categories.map((category) => (
@@ -82,7 +89,10 @@ const handleSearch = async (searchTerm, category) => {
         {/* Search Input */}
         <div className="relative flex-1">
           {showSearchIcon && (
-            <div className="absolute top-3 left-3 items-center" ref={clickPoint}>
+            <div
+              className="absolute top-3 left-3 items-center"
+              ref={clickPoint}
+            >
               <svg
                 className="w-5 h-5 text-gray-500"
                 fill="currentColor"
@@ -105,7 +115,9 @@ const handleSearch = async (searchTerm, category) => {
             className="block p-2 pl-10 pr-10 w-full text-gray-900 bg-black border border-neutral-700 focus:pl-3 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
             placeholder="Search for sessions..."
             onFocus={() => (clickPoint.current.style.display = "none")}
-            onBlur={() => !query && (clickPoint.current.style.display = "block")}
+            onBlur={() =>
+              !query && (clickPoint.current.style.display = "block")
+            }
             aria-label="Search videos"
           />
 
