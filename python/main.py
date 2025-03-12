@@ -18,6 +18,8 @@ from pydantic import BaseModel
 from moviepy.audio.io.AudioFileClip import AudioFileClip
 from moviepy.video.io.VideoFileClip import VideoFileClip
 import speech_recognition as sr
+from qdrant_client.http.models import Filter, FieldCondition, MatchValue
+
 
 
 app = Flask(__name__)
@@ -433,25 +435,53 @@ def incremental_transcript(session_id):
 @app.route('/python/video/<session_id>', methods=['GET'])
 def get_video_document(session_id):
     try:
+        # First, try to retrieve the document by its id.
         results = client.retrieve(
         collection_name="videos",
         ids=[session_id],
         with_payload=True
         )
-        if not results or len(results) == 0:
-            return jsonify({"error": "Video not found"}), 404
-
-        video = results[0]  # Unpack the first element
-        return jsonify({
+        if results and len(results) > 0:
+            video = results # Unpack the first element.
+            return jsonify({
             "title": video.payload.get("title", ""),
             "link": video.payload.get("video_url", ""),
             "transcript": video.payload.get("transcript", ""),
             "status": video.payload.get("status", "")
-        }), 200
+            }), 200
+
+        # If the first method fails, search for a document whose video_url (link) matches "/vidio/{session_id}".
+        filter_obj = Filter(
+            must=[
+                FieldCondition(
+                    key="video_url",
+                    match=MatchValue(value=f"/videos/{session_id}")
+                )
+            ]
+        )
+        # Use scroll to find matching docs. You can adjust limit as needed.
+        results2, _ = client.scroll(
+            collection_name="videos",
+            with_payload=True,
+            query_filter=filter_obj,
+            limit=1
+        )
+        if results2 and len(results2) > 0:
+            video = results2
+            return jsonify({
+                "title": video.payload.get("title", ""),
+                "link": video.payload.get("video_url", ""),
+                "transcript": video.payload.get("transcript", ""),
+                "status": video.payload.get("status", "")
+            }), 200
+
+        # If no matching document is found, return an error.
+        return jsonify({"error": "Video not found"}), 404
 
     except Exception as e:
         logger.error(f"Video fetch failed: {str(e)}")
         return jsonify({"error": "Video fetch failed"}), 500
+
 
 
 @app.route('/python/leaderboard', methods=['GET'])
