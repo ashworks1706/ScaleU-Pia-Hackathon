@@ -468,7 +468,7 @@ const [finalVideoURL, setFinalVideoURL] = useState("")
   }, [votes, poll, id]);
   // Rest of the component remains similar with these UI additions:
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800">
+    <div className="min-h-screen bg-black">
       <NavbarSection />
 
       {/* Status bar with improved styling */}

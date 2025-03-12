@@ -43,7 +43,6 @@ export default function LeaderboardPage() {
       }
     };
 
-    text;
     fetchLeaderboard();
   }, []);
 
@@ -54,7 +53,7 @@ export default function LeaderboardPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 text-white flex items-center justify-center">
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
         <div className="flex flex-col items-center">
           <div className="animate-bounce w-12 h-12 mb-4">
             <svg
@@ -79,10 +78,9 @@ export default function LeaderboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 text-white">
+    <div className="min-h-screen bg-black text-white">
       {/* Navbar */}
       <NavbarSection />
-      text
       {/* Leaderboard Content */}
       <div className="p-8">
         <h1 className="text-4xl font-bold text-center mb-8">Leaderboard</h1>

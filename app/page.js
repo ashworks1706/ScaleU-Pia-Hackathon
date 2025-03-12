@@ -18,7 +18,7 @@ export default function Home() {
   return (
     <>
       <SignedOut>
-        <div className="flex flex-col min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 text-white">
+        <div className="flex flex-col min-h-screen bg-black text-white">
           {/* Navbar */}
           <nav className="fixed top-0 left-0 right-0 z-50 bg-black backdrop-blur-md border-b border-gray-800 shadow-lg">
             <div className="container mx-auto flex items-center justify-between py-4 px-6">
