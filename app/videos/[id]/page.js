@@ -56,7 +56,9 @@ export default function VideoView() {
             <div className="embed-responsive embed-responsive-16by9">
               <iframe
                 className="w-full h-64 rounded-md"
-                src={`${youtubeId}`}
+                src={youtubeId}
+                width={560}
+                height={315}
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
                 title="YouTube Video Player"
