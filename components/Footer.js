@@ -5,7 +5,7 @@ export default function Footer() {
     <footer className="border-t border-neutral-700 py-6 mt-auto bg-black backdrop-blur-md">
       <div className="container flex justify-center items-center gap-8 mx-auto px-4 text-center">
         <p className="text-neutral-400 text-sm">
-          &copy; {new Date().getFullYear()} GroupThink. All rights reserved.
+          &copy; {new Date().getFullYear()} HiveMind. All rights reserved.
         </p>
         {/* Optional: Add social media icons or links */}
         <div className="mt-2 flex justify-center space-x-4">

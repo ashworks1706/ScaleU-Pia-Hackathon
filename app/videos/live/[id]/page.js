@@ -20,6 +20,7 @@ import {
   Badge,
   Tooltip,
 } from "@heroui/react";
+import Peer from 'simple-peer';
 
 const Whiteboard = dynamic(
   async () => (await import("../../../../components/canvasWrapper")).default,
@@ -79,7 +80,12 @@ export default function LiveSession() {
   const channelRef = useRef(null);
   const pieSocketRef = useRef(null);
   const [wsConnected, setWsConnected] = useState(false);
-const [finalVideoURL, setFinalVideoURL] = useState("")
+  const [finalVideoURL, setFinalVideoURL] = useState("");
+  const [peers, setPeers] = useState({});
+  const userAudioRef = useRef(null);
+  const peerConnections = useRef({});
+  const audioContextRef = useRef(null);
+
   // Improved WebSocket reconnection logic
   useEffect(() => {
     if (!id) return;
@@ -253,91 +259,196 @@ const [finalVideoURL, setFinalVideoURL] = useState("")
     }
   }, [wsConnected]);
 
-  // Better canvas recording setup
+  // Complete rewrite of the setupCanvasRecording function
   const setupCanvasRecording = useCallback(() => {
     if (!drawRef?.current || !whiteboardReady) {
-      console.log("Whiteboard not ready yet, delaying canvas recording setup");
-      return { canvasRecorder: null, audioRecorder: null };
+      console.log("Canvas not ready for recording");
+      return { canvasRecorder: null };
     }
     
     try {
-      console.log("Setting up canvas recording...");
+      console.log("Setting up canvas recording with multiple fallbacks");
+      
+      // Get the canvas element
       const canvas = drawRef.current.getCanvas();
       if (!canvas) {
-        console.error("Canvas element not found");
-        return { canvasRecorder: null, audioRecorder: null };
+        throw new Error("Canvas element not found");
       }
       
-      // Ensure we get a stable frame rate
+      // Try multiple methods to capture canvas stream
       let canvasStream;
       try {
-        // Try with captureStream first (modern browsers)
+        console.log("Trying standard canvas.captureStream(30)");
         canvasStream = canvas.captureStream(30);
-        console.log("Canvas stream created with captureStream");
+      } catch (err1) {
+        console.warn("Standard captureStream failed:", err1);
         
-        if (!canvasStream || canvasStream.getVideoTracks().length === 0) {
-          throw new Error("Canvas stream has no video tracks");
-        }
-      } catch (err) {
-        console.error("Standard canvas capture failed:", err);
-        // Fallback for Safari
         try {
+          console.log("Trying captureStream without framerate");
           canvasStream = canvas.captureStream();
-          console.log("Canvas stream created with fallback method");
-        } catch (fallbackErr) {
-          console.error("Fallback canvas capture also failed:", fallbackErr);
-          return { canvasRecorder: null, audioRecorder: null };
+        } catch (err2) {
+          console.warn("Fallback captureStream failed:", err2);
+          
+          try {
+            console.log("Trying webkitCaptureStream for Safari");
+            // @ts-ignore - For Safari
+            canvasStream = canvas.webkitCaptureStream(30);
+          } catch (err3) {
+            console.error("All canvas capture methods failed:", err3);
+            throw new Error("Canvas capture not supported in this browser");
+          }
         }
       }
       
-      // Create a combined stream if we have audio
-      let combinedStream = canvasStream;
+      // Verify video tracks
+      if (!canvasStream.getVideoTracks().length) {
+        throw new Error("No video tracks in canvas stream");
+      }
+      
+      console.log("Canvas stream acquired with video tracks:", 
+                 canvasStream.getVideoTracks().map(t => `${t.label}(${t.readyState})`).join(', '));
+      
+      // Create a completely new MediaStream to ensure compatibility
+      const combinedStream = new MediaStream();
+      
+      // Add the video track from canvas
+      canvasStream.getVideoTracks().forEach(track => {
+        console.log("Adding canvas video track to recording");
+        combinedStream.addTrack(track);
+      });
+      
+      // Add audio track if available
       if (audioStreamRef.current) {
         const audioTracks = audioStreamRef.current.getAudioTracks();
         if (audioTracks.length > 0) {
-          console.log("Adding audio track to canvas recording");
-          audioTracks.forEach(track => combinedStream.addTrack(track));
+          console.log("Adding audio track to canvas recording:", 
+                     audioTracks[0].label, "enabled:", audioTracks[0].enabled);
+          combinedStream.addTrack(audioTracks[0].clone());
+        } else {
+          console.warn("No audio tracks available to add to recording");
         }
       }
       
-      // More reliable recorder initialization
-      const canvasRecorder = new MediaRecorder(combinedStream, {
-        mimeType: "video/webm;codecs=vp8",
-        videoBitsPerSecond: 2500000,
-      });
+      // Find supported video recording format with fallbacks
+      let selectedFormat;
+      let recorder;
       
-      const canvasChunks = [];
-      canvasRecorder.ondataavailable = (e) => {
+      // Try different format combinations until one works
+      for (const format of [
+        'video/webm;codecs=vp9,opus',
+        'video/webm;codecs=vp8,opus',
+        'video/webm;codecs=h264,opus',
+        'video/webm',
+        'video/mp4'
+      ]) {
+        try {
+          if (MediaRecorder.isTypeSupported(format)) {
+            console.log(`Format supported: ${format}`);
+            selectedFormat = format;
+            
+            // Try to create recorder with this format
+            recorder = new MediaRecorder(combinedStream, {
+              mimeType: format,
+              videoBitsPerSecond: 2500000,
+              audioBitsPerSecond: 128000
+            });
+            
+            break;
+          }
+        } catch (e) {
+          console.warn(`Format ${format} not supported:`, e);
+        }
+      }
+      
+      // If no format worked, try without specifying mimeType
+      if (!recorder) {
+        console.warn("No supported formats found, trying without mimeType");
+        recorder = new MediaRecorder(combinedStream);
+      }
+      
+      if (!recorder) {
+        throw new Error("Failed to create MediaRecorder with any format");
+      }
+      
+      console.log(`Recording with: ${selectedFormat || 'default browser format'}`);
+      
+      // Collect chunks with reliable error handling
+      const videoChunks = [];
+      
+      recorder.ondataavailable = (e) => {
         if (e.data && e.data.size > 0) {
-          canvasChunks.push(e.data);
-          console.log("Canvas chunk added, size:", e.data.size);
+          videoChunks.push(e.data);
+          console.log(`Video chunk collected: ${e.data.size} bytes, total: ${videoChunks.length} chunks`);
         }
       };
       
-      canvasRecorder.onstop = async () => {
-        console.log("Canvas recorder stopped, chunks:", canvasChunks.length);
-        if (canvasChunks.length > 0) {
-          const canvasBlob = new Blob(canvasChunks, { type: "video/webm" });
-          console.log("Canvas recording completed, size:", canvasBlob.size);
-          await uploadRecording(canvasBlob, "canvas");
-        } else {
-          console.error("No canvas chunks recorded");
+      // Handle recording completion
+      recorder.onstop = async () => {
+        console.log(`Recording stopped with ${videoChunks.length} chunks`);
+        
+        if (videoChunks.length === 0) {
+          console.error("No video chunks collected");
+          setRecordingStatus("failed");
+          return;
+        }
+        
+        try {
+          setRecordingStatus("processing");
+          
+          const videoBlob = new Blob(videoChunks, { 
+            type: selectedFormat || 'video/webm' 
+          });
+          
+          console.log(`Final recording size: ${(videoBlob.size / 1024 / 1024).toFixed(2)} MB`);
+          
+          // Upload the video with triple retry mechanism
+          let success = false;
+          for (let attempt = 0; attempt < 3 && !success; attempt++) {
+            try {
+              if (attempt > 0) {
+                console.log(`Retry attempt ${attempt + 1} for video upload`);
+              }
+              
+              await uploadRecording(videoBlob, "canvas");
+              success = true;
+            } catch (uploadErr) {
+              console.error(`Upload attempt ${attempt + 1} failed:`, uploadErr);
+              
+              if (attempt < 2) {
+                // Wait before retrying
+                await new Promise(resolve => setTimeout(resolve, 3000));
+              }
+            }
+          }
+          
+          if (success) {
+            setRecordingStatus("completed");
+          } else {
+            setRecordingStatus("failed");
+          }
+        } catch (err) {
+          console.error("Processing recording failed:", err);
+          setRecordingStatus("failed");
         }
       };
       
-      canvasRecorder.onerror = (event) => {
-        console.error("Canvas recording error:", event);
+      // Handle recording errors
+      recorder.onerror = (event) => {
+        console.error("Recording error:", event);
         setRecordingStatus("failed");
       };
       
-      canvasRecorder.start(1000);
-      console.log("Canvas recording started successfully");
-      return { canvasRecorder, audioRecorder: null };
+      // Start recording with small chunks for reliability
+      recorder.start(1000);
+      console.log("Combined video+audio recording started");
+      
+      return { canvasRecorder: recorder };
     } catch (error) {
-      console.error("Setup canvas recording error:", error);
-      return { canvasRecorder: null, audioRecorder: null };
+      console.error("Failed to setup canvas recording:", error);
+      setRecordingStatus("failed");
+      return { canvasRecorder: null };
     }
-  }, [whiteboardReady]);
+  }, [whiteboardReady, audioStreamRef.current]);
 
   // Initialize media recording when whiteboard is ready
   useEffect(() => {
@@ -377,102 +488,500 @@ const [finalVideoURL, setFinalVideoURL] = useState("")
     initMedia();
   }, [whiteboardReady, setupCanvasRecording, isHost, wsConnected, send]);
 
-  // Updated uploadRecording function with additional error details
+  // Robust upload function with retry logic and progress tracking
   const uploadRecording = async (blob, type) => {
+    if (!blob || blob.size === 0) {
+      console.error(`Empty ${type} blob, cannot upload`);
+      return;
+    }
+    
+    console.log(`Starting upload of ${type} recording: ${(blob.size / 1024 / 1024).toFixed(2)} MB`);
+    
+    // For large files, chunk the upload
+    const MAX_CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks
+    
+    if (blob.size > MAX_CHUNK_SIZE && type === "canvas") {
+      return uploadLargeRecording(blob, type);
+    }
+    
     try {
+      // Create form data with detailed metadata
       const formData = new FormData();
-      formData.append(type, blob, `${id}_${type}.webm`);
-      // For canvas recordings, send to the dedicated backend endpoint
-      if (type === "canvas") {
-        console.log("Posting recordings data, size:", blob.size);
-        const response = await fetch(`/python/recordings/${id}`, {
+      formData.append('type', type);
+      formData.append('session_id', id);
+      formData.append('content_type', blob.type);
+      formData.append('timestamp', Date.now().toString());
+      formData.append(type, blob, `${id}_${type}_${Date.now()}.webm`);
+      
+      // Track upload progress
+      const xhr = new XMLHttpRequest();
+      
+      const uploadPromise = new Promise((resolve, reject) => {
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            const progress = Math.round((event.loaded / event.total) * 100);
+            console.log(`Upload progress: ${progress}%`);
+          }
+        };
+        
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              const response = JSON.parse(xhr.responseText);
+              resolve(response);
+            } catch (e) {
+              reject(new Error(`Invalid JSON response: ${xhr.responseText}`));
+            }
+          } else {
+            reject(new Error(`Upload failed with status ${xhr.status}: ${xhr.responseText}`));
+          }
+        };
+        
+        xhr.onerror = () => reject(new Error('Network error during upload'));
+        xhr.ontimeout = () => reject(new Error('Upload timed out'));
+      });
+      
+      // Set timeout
+      xhr.timeout = 120000; // 2 minutes
+      
+      // Open and send the request
+      xhr.open('POST', `/python/recordings/${id}`, true);
+      xhr.send(formData);
+      
+      // Wait for completion
+      const data = await uploadPromise;
+      console.log(`${type} upload successful:`, data);
+      
+      // Update final video URL if available
+      if (data.video_url) {
+        setFinalVideoURL(data.video_url);
+        console.log("Updated final video URL:", data.video_url);
+      }
+      
+      return data;
+    } catch (error) {
+      console.error(`${type} upload error:`, error);
+      throw error; // Rethrow to allow retry logic
+    }
+  };
+
+  // Function to handle large recording uploads by chunking
+  const uploadLargeRecording = async (blob, type) => {
+    console.log("Using chunked upload for large recording");
+    
+    const MAX_CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks
+    const totalChunks = Math.ceil(blob.size / MAX_CHUNK_SIZE);
+    
+    try {
+      let uploadId = null;
+      
+      // Upload each chunk
+      for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+        const start = chunkIndex * MAX_CHUNK_SIZE;
+        const end = Math.min(start + MAX_CHUNK_SIZE, blob.size);
+        
+        // Extract the chunk
+        const chunk = blob.slice(start, end);
+        
+        // Create form data for this chunk
+        const formData = new FormData();
+        formData.append('type', type);
+        formData.append('session_id', id);
+        formData.append('chunk_index', chunkIndex.toString());
+        formData.append('total_chunks', totalChunks.toString());
+        formData.append('content_type', blob.type);
+        
+        if (uploadId) {
+          formData.append('upload_id', uploadId);
+        }
+        
+        formData.append('chunk', chunk, `${id}_${type}_chunk${chunkIndex}.webm`);
+        
+        // Upload the chunk
+        const response = await fetch(`/python/recordings/${id}/chunk`, {
           method: "POST",
           body: formData,
         });
-        console.log("Recordings data response status:", response.status);
+        
         if (!response.ok) {
           const errorText = await response.text();
-          throw new Error(
-            `Server responded with status ${response.status}: ${errorText}`
-          );
+          throw new Error(`Chunk ${chunkIndex} upload failed: ${errorText}`);
         }
         
-        // Update finalVideoURL after successful upload
         const data = await response.json();
-        if (data.video_url) {
+        
+        // Store the upload ID from the first chunk
+        if (chunkIndex === 0) {
+          uploadId = data.upload_id;
+        }
+        
+        console.log(`Chunk ${chunkIndex + 1}/${totalChunks} uploaded (${Math.round((chunkIndex + 1) * 100 / totalChunks)}%)`);
+        
+        // Get the final URL from the last chunk response
+        if (chunkIndex === totalChunks - 1 && data.video_url) {
           setFinalVideoURL(data.video_url);
-          console.log("Set final video URL:", data.video_url);
+          console.log("Updated final video URL from chunked upload:", data.video_url);
+          return data;
         }
       }
-    } catch (error) {
-      console.error(`Upload error (${type}):`, error);
-      setRecordingStatus("failed");
-    }
-  };
-
-  // Improved transcript handling with more frequent updates
-  const updateTranscript = async (chunk) => {
-    try {
-      console.log("Sending audio chunk for transcription, size:", chunk.size);
-      const formData = new FormData();
-      formData.append('audio', chunk, `${id}_transcript_${Date.now()}.webm`);
       
-      const response = await fetch(`/python/update-transcript/${id}`, {
+      // If we didn't get a URL from the chunks, try to finalize the upload
+      const finalizeResponse = await fetch(`/python/recordings/${id}/finalize`, {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          upload_id: uploadId,
+          session_id: id,
+          content_type: blob.type,
+        }),
       });
       
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Transcript update failed: ${response.status} - ${errorText}`);
+      if (!finalizeResponse.ok) {
+        throw new Error("Failed to finalize chunked upload");
       }
       
-      console.log("Transcription chunk processed successfully");
+      const finalData = await finalizeResponse.json();
+      
+      if (finalData.video_url) {
+        setFinalVideoURL(finalData.video_url);
+      }
+      
+      return finalData;
     } catch (error) {
-      console.error("Transcript error:", error);
+      console.error("Chunked upload failed:", error);
+      throw error;
     }
   };
 
-  // Updated audio recording setup with consistent transcript updates
-  useEffect(() => {
-    if (!audioStreamRef.current || !id) return;
-    
+  // Complete rewrite of audio initialization
+  const initializeAudio = async () => {
     try {
-      // Create a separate recorder specifically for transcript updates
-      const transcriptRecorder = new MediaRecorder(audioStreamRef.current, {
-        mimeType: 'audio/webm',
-        audioBitsPerSecond: 16000 // Lower bitrate for transcription
+      console.log("Setting up audio with robust fallbacks...");
+      
+      // Try to create audio context first (needed for processing)
+      try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        audioContextRef.current = new AudioContext();
+        console.log("Audio context created:", audioContextRef.current.state);
+        
+        // Automatically resume audio context on user interaction
+        if (audioContextRef.current.state === 'suspended') {
+          const resumeAudio = async () => {
+            await audioContextRef.current.resume();
+            document.removeEventListener('click', resumeAudio);
+            document.removeEventListener('touchstart', resumeAudio);
+          };
+          document.addEventListener('click', resumeAudio);
+          document.addEventListener('touchstart', resumeAudio);
+        }
+      } catch (audioCtxError) {
+        console.warn("Could not create AudioContext:", audioCtxError);
+      }
+      
+      // First try with ideal constraints
+      const constraints = {
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 2,
+          sampleRate: 48000,
+        }
+      };
+      
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        console.log("Got high-quality audio stream");
+      } catch (err) {
+        console.warn("Failed with ideal constraints:", err);
+        
+        // Try with basic constraints
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          console.log("Got basic audio stream");
+        } catch (basicErr) {
+          console.error("Failed to get any audio:", basicErr);
+          throw new Error("Could not access microphone - " + basicErr.message);
+        }
+      }
+      
+      // Validate audio tracks exist
+      if (!stream.getAudioTracks().length) {
+        throw new Error("No audio tracks in stream");
+      }
+      
+      console.log("Audio tracks:", stream.getAudioTracks().map(t => t.label).join(', '));
+      
+      // Store the stream for later use
+      audioStreamRef.current = stream;
+      
+      // Set up audio playback
+      if (audioRef.current) {
+        audioRef.current.srcObject = stream;
+        audioRef.current.muted = false;
+        audioRef.current.volume = 1.0;
+        
+        // Force audio to play
+        const playPromise = audioRef.current.play();
+        if (playPromise) {
+          playPromise.catch(e => {
+            console.warn("Auto-play prevented:", e);
+            // Add UI to tell user to click to enable audio
+            const enableAudio = () => {
+              audioRef.current.play();
+              document.removeEventListener('click', enableAudio);
+            };
+            document.addEventListener('click', enableAudio);
+          });
+        }
+      }
+      
+      // Now create a duplicate stream for user's own audio
+      if (userAudioRef.current) {
+        userAudioRef.current.srcObject = stream.clone();
+        userAudioRef.current.muted = true; // Mute own audio to prevent feedback
+      }
+      
+      setMediaState(prev => ({...prev, hasAudio: true}));
+      
+      // Initialize peer connections for audio transmission
+      initializePeerConnections(stream);
+      
+      // Set up audio recording for saving and transcription
+      setupAudioRecording(stream);
+      
+      return stream;
+    } catch (err) {
+      console.error("Audio initialization failed:", err);
+      setConnectionError("Microphone Error: " + err.message);
+      setMediaState(prev => ({...prev, hasAudio: false}));
+      return null;
+    }
+  };
+
+  // Add this function to handle peer connections for audio transmission
+  const initializePeerConnections = (stream) => {
+    if (!wsConnected || !stream) return;
+    
+    // Function to create a new peer connection
+    const createPeer = (targetUserId, initiator = false) => {
+      console.log(`Creating peer connection with ${targetUserId} (initiator: ${initiator})`);
+      
+      const peer = new Peer({
+        initiator,
+        trickle: false,
+        stream: stream,
+        config: {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:global.stun.twilio.com:3478' }
+          ]
+        }
       });
       
-      let transcriptChunks = [];
-      let lastTranscriptSend = Date.now();
+      // Handle receiving signal data
+      peer.on('signal', data => {
+        console.log("Got signal to send to peer:", targetUserId);
+        
+        // Send the signal via websocket
+        if (channelRef.current) {
+          channelRef.current.publish('signal', {
+            from: userId,
+            to: targetUserId,
+            signal: data
+          });
+        }
+      });
       
-      transcriptRecorder.ondataavailable = (e) => {
+      // Handle receiving a stream
+      peer.on('stream', remoteStream => {
+        console.log(`Received stream from ${targetUserId}`);
+        
+        // Create an audio element for this peer
+        const audioEl = document.createElement('audio');
+        audioEl.srcObject = remoteStream;
+        audioEl.autoplay = true;
+        audioEl.id = `audio-${targetUserId}`;
+        
+        // Add to the document
+        document.body.appendChild(audioEl);
+      });
+      
+      // Handle errors
+      peer.on('error', err => {
+        console.error(`Peer error with ${targetUserId}:`, err);
+        
+        // Try to recreate the connection
+        setTimeout(() => {
+          if (peerConnections.current[targetUserId]) {
+            peerConnections.current[targetUserId].destroy();
+            delete peerConnections.current[targetUserId];
+            createPeer(targetUserId, initiator);
+          }
+        }, 2000);
+      });
+      
+      return peer;
+    };
+    
+    // Add signal event listener to channel
+    channelRef.current.listen('signal', data => {
+      if (data.to === userId) {
+        const { from, signal } = data;
+        
+        // If we don't have a peer for this user yet, create one
+        if (!peerConnections.current[from]) {
+          peerConnections.current[from] = createPeer(from, false);
+        }
+        
+        // Signal the peer with the received data
+        try {
+          peerConnections.current[from].signal(signal);
+        } catch (err) {
+          console.error("Error signaling peer:", err);
+        }
+      }
+    });
+    
+    // When a new user joins, create a peer connection with them
+    channelRef.current.listen('join', data => {
+      if (data.userId !== userId) {
+        console.log(`New user joined: ${data.userId}`);
+        
+        // Create a new peer as the initiator
+        peerConnections.current[data.userId] = createPeer(data.userId, true);
+      }
+    });
+    
+    // Clean up peer connections when users leave
+    channelRef.current.listen('leave', data => {
+      if (peerConnections.current[data.userId]) {
+        console.log(`User left: ${data.userId}`);
+        peerConnections.current[data.userId].destroy();
+        delete peerConnections.current[data.userId];
+        
+        // Remove their audio element
+        const audioEl = document.getElementById(`audio-${data.userId}`);
+        if (audioEl) audioEl.remove();
+      }
+    });
+  };
+
+  // Function to set up audio recording with proper error handling
+  const setupAudioRecording = (stream) => {
+    if (!stream) return;
+    
+    try {
+      // Find supported MIME types
+      const supportedAudioTypes = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/ogg;codecs=opus',
+        'audio/mp4',
+        'audio/mpeg'
+      ].filter(type => {
+        try {
+          return MediaRecorder.isTypeSupported(type);
+        } catch (e) {
+          return false;
+        }
+      });
+      
+      if (supportedAudioTypes.length === 0) {
+        throw new Error("Browser doesn't support any required audio recording formats");
+      }
+      
+      const selectedMimeType = supportedAudioTypes[0];
+      console.log("Using audio recording format:", selectedMimeType);
+      
+      // Create a recorder with reliable settings
+      const recorder = new MediaRecorder(stream, {
+        mimeType: selectedMimeType,
+        audioBitsPerSecond: 128000,
+      });
+      
+      const audioChunks = [];
+      
+      recorder.ondataavailable = (e) => {
         if (e.data && e.data.size > 0) {
-          transcriptChunks.push(e.data);
+          audioChunks.push(e.data);
           
-          // Send transcription data every 15 seconds
-          const now = Date.now();
-          if (now - lastTranscriptSend > 15000 && transcriptChunks.length > 0) {
-            const transcriptBlob = new Blob(transcriptChunks, { type: 'audio/webm' });
-            updateTranscript(transcriptBlob);
-            transcriptChunks = []; // Clear after sending
-            lastTranscriptSend = now;
+          // Also send for transcription periodically
+          if (audioChunks.length % 5 === 0) {
+            const transcriptBlob = new Blob([...audioChunks], { type: selectedMimeType });
+            sendForTranscription(transcriptBlob);
           }
         }
       };
       
-      transcriptRecorder.start(5000); // Collect data every 5 seconds
-      
-      return () => {
-        if (transcriptRecorder.state !== 'inactive') {
-          transcriptRecorder.stop();
+      recorder.onstop = async () => {
+        if (audioChunks.length === 0) {
+          console.warn("No audio data captured");
+          return;
+        }
+        
+        try {
+          const audioBlob = new Blob(audioChunks, { type: selectedMimeType });
+          console.log(`Complete audio recording: ${audioBlob.size} bytes`);
+          
+          // Upload the audio recording
+          await uploadRecording(audioBlob, "audio");
+        } catch (err) {
+          console.error("Error processing audio recording:", err);
         }
       };
+      
+      // Start recording with small chunks for better handling
+      recorder.start(2000);
+      console.log("Audio recording started successfully");
+      
+      // Store the recorder
+      mediaRecorder.current = recorder;
     } catch (err) {
-      console.error("Failed to initialize transcript recorder:", err);
+      console.error("Failed to set up audio recording:", err);
+      setConnectionError("Recording setup failed: " + err.message);
     }
-  }, [audioStreamRef.current, id]);
+  };
+
+  // Function to send audio data for transcription
+  const sendForTranscription = async (blob) => {
+    if (!blob || blob.size < 1000) {
+      return; // Don't send tiny chunks
+    }
+    
+    try {
+      console.log(`Sending ${blob.size} bytes for transcription`);
+      
+      const formData = new FormData();
+      formData.append('audio', blob, `transcript_${id}_${Date.now()}.webm`);
+      formData.append('session_id', id);
+      
+      // Add timeout to prevent hanging
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 20000);
+      
+      const response = await fetch(`/python/update-transcript/${id}`, {
+        method: "POST",
+        body: formData,
+        signal: controller.signal,
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        throw new Error(`Server responded with ${response.status}`);
+      }
+      
+      console.log("Transcription request successful");
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        console.warn("Transcription request timed out");
+      } else {
+        console.error("Transcription error:", err);
+      }
+    }
+  };
 
   // Initialize session including media and heartbeat setup
   useEffect(() => {
@@ -485,70 +994,69 @@ const [finalVideoURL, setFinalVideoURL] = useState("")
         const sessionData = await sessionRes.json();
         setIsHost(userId === sessionData.host_id);
         
-        // Improved audio capture with error handling
-        try {
-          console.log("Requesting audio stream...");
-          const stream = await navigator.mediaDevices.getUserMedia({
-            audio: true,
-            echoCancellation: true,
-            noiseSuppression: true,
-          });
-          
-          console.log("Audio stream obtained:", stream.getAudioTracks().length > 0 ? "Yes" : "No");
-          audioStreamRef.current = stream;
-          
-          if (audioRef.current) {
-            audioRef.current.srcObject = stream;
-            audioRef.current.onloadedmetadata = () => {
-              console.log("Audio element ready, attempting to play");
-              audioRef.current.play().catch(e => console.warn("Auto-play prevented:", e));
-            };
-          }
-          
-          setMediaState(prev => ({...prev, hasAudio: true}));
-        } catch (audioErr) {
-          console.error("Audio permission error:", audioErr);
-          setConnectionError(`Audio permission denied: ${audioErr.message}`);
-          setMediaState(prev => ({...prev, hasAudio: false}));
-        }
+        // Initialize audio with our improved function
+        await initializeAudio();
         
-        mediaRecorder.current = new MediaRecorder(stream);
-        const audioChunks = [];
-        mediaRecorder.current.ondataavailable = (e) => {
-          audioChunks.push(e.data);
-        };
-        mediaRecorder.current.onstop = async () => {
-          try {
-            setRecordingStatus("processing");
-            const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
-            await uploadRecording(audioBlob, "audio");
-            setRecordingStatus("completed");
-          } catch (error) {
-            setRecordingStatus("failed");
-          }
-        };
-        mediaRecorder.current.start();
+        // Setup heartbeat
         const heartbeatInterval = setInterval(() => {
-          if (wsConnected) {
-            send({ type: "heartbeat", payload: {} });
+          if (wsConnected && channelRef.current) {
+            channelRef.current.publish("heartbeat", { userId, timestamp: Date.now() });
           }
         }, 30000);
+        
+        // Send leave message on unmount
         return () => {
           clearInterval(heartbeatInterval);
+          
+          if (wsConnected && channelRef.current) {
+            channelRef.current.publish("leave", { userId });
+          }
+          
+          // Stop all media
           if (mediaRecorder.current?.state === "recording") {
-            mediaRecorder.current.stop();
+            try {
+              mediaRecorder.current.stop();
+            } catch (e) {
+              console.warn("Error stopping media recorder:", e);
+            }
           }
-          if (stream) {
-            stream.getTracks().forEach((track) => track.stop());
+          
+          if (combinedRecorderRef.current?.canvas?.state === "recording") {
+            try {
+              combinedRecorderRef.current.canvas.stop();
+            } catch (e) {
+              console.warn("Error stopping canvas recorder:", e);
+            }
           }
+          
+          // Stop all audio tracks
+          if (audioStreamRef.current) {
+            audioStreamRef.current.getTracks().forEach(track => {
+              try {
+                track.stop();
+              } catch (e) {
+                console.warn("Error stopping audio track:", e);
+              }
+            });
+          }
+          
+          // Close any peer connections
+          Object.values(peerConnections.current).forEach(peer => {
+            try {
+              peer.destroy();
+            } catch (e) {
+              console.warn("Error closing peer connection:", e);
+            }
+          });
         };
       } catch (error) {
-        console.error("Initialization failed:", error);
+        console.error("Session initialization failed:", error);
         setConnectionError(`Initialization error: ${error.message}`);
       }
     };
+    
     if (id) initializeSession();
-  }, [id, userId, wsConnected, send]);
+  }, [id, userId]);
 
   // Improved whiteboard state handling
   useEffect(() => {
@@ -787,7 +1295,6 @@ const [finalVideoURL, setFinalVideoURL] = useState("")
                     </div>
                   </div>
                 )}
-                {/* <div className="flex w-full text-sm text-center "> */}
                 <Whiteboard
                   ref={drawRef}
                   initialData={whiteboardData}
@@ -797,8 +1304,6 @@ const [finalVideoURL, setFinalVideoURL] = useState("")
                     setWhiteboardReady(true);
                   }}
                 />
-
-                {/* </div> */}
               </CardBody>
             </Card>
 
@@ -990,6 +1495,15 @@ const [finalVideoURL, setFinalVideoURL] = useState("")
             </CardFooter>
           </Card>
         </div>
+      </div>
+
+      {/* Add this after your audio element in the JSX */}
+      <div className="hidden">
+        {/* User's own audio */}
+        <audio ref={userAudioRef} muted={true} />
+        
+        {/* Container for peer audio elements */}
+        <div id="remote-audio-container"></div>
       </div>
     </div>
   );

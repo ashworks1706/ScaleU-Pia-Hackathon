@@ -143,7 +143,7 @@ export default function NavbarSection() {
           />
           <NavbarBrand>
             <AcmeLogo />
-            <p className="font-bold text-white text-xl ml-2">GroupThink</p>
+            <p className="font-bold text-white text-xl ml-2">HiveMind</p>
           </NavbarBrand>
         </NavbarContent>
 

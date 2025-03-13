@@ -27,7 +27,7 @@ export default function Home() {
                   GT
                 </span>
                 <span className="font-semibold text-xl text-white">
-                  GroupThink
+                  HiveMind
                 </span>
               </Link>
               <div className="flex items-center gap-6">
@@ -171,7 +171,7 @@ function HeroSection() {
           What Our Users Say
         </h3>
         <p className="text-gray-400">
-          "GroupThink has revolutionized how we collaborate. It's like having a personal AI tutor in every session!"
+          "HiveMind has revolutionized how we collaborate. It's like having a personal AI tutor in every session!"
         </p>
       </motion.div>
     </section>
@@ -289,7 +289,7 @@ function LeaderboardSection() {
             Top Contributors
           </h2>
           <p className="text-gray-400 text-lg">
-            Meet the most active tutors and contributors on GroupThink.
+            Meet the most active tutors and contributors on HiveMind.
           </p>
         </div>
         <motion.div
@@ -354,7 +354,7 @@ function Footer() {
                 Z
               </span>
               <span className="font-semibold text-xl text-white">
-                GroupThink
+                HiveMind
               </span>
             </div>
             <p className="text-gray-400 text-sm">
@@ -403,7 +403,7 @@ function Footer() {
           </div>
         </div>
         <div className="border-t border-gray-800 mt-8 pt-8 text-center text-sm text-gray-400">
-          &copy; {new Date().getFullYear()} GroupThink. All rights reserved.
+          &copy; {new Date().getFullYear()} HiveMind. All rights reserved.
         </div>
       </div>
     </footer>
