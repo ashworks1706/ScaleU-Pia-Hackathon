@@ -1,36 +1,24 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
 
-## Getting Started
+# HiveMind
 
-First, run the development server:
+![HiveMind](https://github.com/user-attachments/assets/fa35b70f-60f5-4358-9a45-98c71497cfe9)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+AI-powered collaborative Zoom sessions enhanced by real-time semantic search, Canvas resources, and multimodal agents.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Pitch
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+- HiveMind uses Multimodal Agents to transform group study sessions into a real-time searchable knowledge hub and RAG Systems to instantly connect students.
+- AI-Powered Professor (and Tutor) Agents that join your study session, to guide you towards the solution using Canvas resources reducing repetitive questions.
+- We reimagine education as an inclusive, social, and evolving journey where every student can learn and connect at their own time ensuring equitable access
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## How We Built It
+![HiveMind-2](https://github.com/user-attachments/assets/899f4e27-a6be-44bd-96b1-6c2edd34d429)
 
-## Learn More
+### Principled Innovation Framework
 
-To learn more about Next.js, take a look at the following resources:
+Moral - Recognize and address the ethical duty to avoid reinforcing systems that marginalize those who need additional support.
+Civic - Consider how large, impersonal classroom settings fail to promote inclusive community engagement based on our experience.
+Intellectual - Research practices to design social learning experiences while maintaining academic integrity.
+Performance - Continuously evolve the AI-knowledge base to address educational needs and mitigate digital isolation.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Education is one of the most powerful tools for personal and professional growth, yet the way information is imparted had remained largely unchanged and inflexible. Traditional lectures are an one-size-fits-all approach to learning, which creates gaps in understanding and breeds isolation. Collaboration and peer-to-peer learning opportunities are limited. There is no structured way to connect those who eﬀortlessly grasp concepts with those who academically struggle alone. We built digital classrooms that adapt to every student’s needs, making learning more social, engaging, and inclusive.
