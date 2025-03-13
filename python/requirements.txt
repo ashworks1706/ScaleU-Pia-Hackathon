@@ -14,5 +14,6 @@ werkzeug
 pydantic 
 moviepy 
 speechrecognition 
+ffmpeg
 pydub 
 SpeechRecognition

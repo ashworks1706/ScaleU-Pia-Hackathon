@@ -19,7 +19,8 @@ from moviepy.audio.io.AudioFileClip import AudioFileClip
 from moviepy.video.io.VideoFileClip import VideoFileClip
 import speech_recognition as sr
 from qdrant_client.http.models import Filter, FieldCondition, MatchValue
-
+from pydub import AudioSegment
+import io
 
 
 app = Flask(__name__)
@@ -432,32 +433,79 @@ def merge_recordings(canvas_path, audio_path):
             if os.path.exists(path):
                 os.remove(path)
 
-@app.route('/python/update-transcript/<session_id>', methods=['PATCH', 'POST'])
+@app.route('/python/update-transcript/<session_id>', methods=['POST'])
 def incremental_transcript(session_id):
+    # Use simple filenames in current directory
+    temp_input_path = f"input_{session_id}.webm"
+    wav_path = f"output_{session_id}.wav"
+    
     try:
         audio_chunk = request.get_data()
         r = sr.Recognizer()
-        with open(f"temp_{session_id}.wav", "wb") as f:
+        
+        # Log detailed information
+        logger.info(f"Received audio chunk size: {len(audio_chunk)} bytes")
+        logger.info(f"Working directory: {os.getcwd()}")
+        
+        # Skip the in-memory approach entirely and go directly to file-based
+        # First save the original audio
+        with open(temp_input_path, "wb") as f:
             f.write(audio_chunk)
-        with sr.AudioFile(f"temp_{session_id}.wav") as source:
-            audio = r.record(source)
-            new_text = r.recognize_google(audio)
-            results = client.retrieve(
-                collection_name="videos",
-                ids=[session_id],
-                with_payload=True
-            )
-            current = results.payload.get("transcript", "")
-            client.set_payload(
-                collection_name="videos",
-                points=[session_id],
-                payload={"transcript": f"{current}\n{new_text}"}
-            )
-        return jsonify({"status": "updated"}), 200
-
+        
+        logger.info(f"Saved audio to: {temp_input_path}")
+        
+        # Check if ffmpeg is available
+        import subprocess
+        try:
+            # Use ffmpeg directly to convert the file
+            cmd = ["ffmpeg", "-y", "-i", temp_input_path, wav_path]
+            logger.info(f"Running command: {' '.join(cmd)}")
+            subprocess.run(cmd, check=True, capture_output=True)
+            logger.info(f"Conversion successful using ffmpeg")
+        except Exception as e:
+            logger.error(f"ffmpeg conversion failed: {str(e)}")
+            return jsonify({"error": f"Audio conversion failed: {str(e)}"}), 400
+        
+        # Now process the converted WAV file
+        with sr.AudioFile(wav_path) as source:
+            audio_data = r.record(source)
+            new_text = r.recognize_google(audio_data)
+            logger.info(f"Transcription successful: '{new_text}'")
+            
+        # Retrieve the current document
+        results = client.retrieve(
+            collection_name="videos",
+            ids=[session_id],
+            with_payload=True
+        )
+        
+        if not results or len(results) == 0:
+            return jsonify({"error": "Session not found"}), 404
+            
+        video = results[0]  # Get the first element from results
+        current = video.payload.get("transcript", "")
+        
+        # Update with new transcript text
+        client.set_payload(
+            collection_name="videos",
+            points=[session_id],
+            payload={"transcript": f"{current}\n{new_text}"}
+        )
+        
+        return jsonify({"status": "updated", "text": new_text}), 200
+    
     except Exception as e:
         logger.error(f"Incremental transcript failed: {str(e)}")
         return jsonify({"error": str(e)}), 500
+    finally:
+        # Clean up temporary files even if an error occurs
+        for path in [temp_input_path, wav_path]:
+            if os.path.exists(path):
+                try:
+                    os.remove(path)
+                    logger.info(f"Removed temporary file: {path}")
+                except Exception as e:
+                    logger.error(f"Failed to remove temporary file {path}: {str(e)}")
 
 @app.route('/python/video/<session_id>', methods=['GET'])
 def get_video_document(session_id):
