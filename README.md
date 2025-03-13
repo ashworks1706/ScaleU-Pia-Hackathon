@@ -1,6 +1,3 @@
-
-# HiveMind
-
 ![HiveMind](https://github.com/user-attachments/assets/fa35b70f-60f5-4358-9a45-98c71497cfe9)
 
 AI-powered collaborative Zoom sessions enhanced by real-time semantic search, Canvas resources, and multimodal agents.
