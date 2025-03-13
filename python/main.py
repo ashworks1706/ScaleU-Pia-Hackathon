@@ -432,7 +432,7 @@ def merge_recordings(canvas_path, audio_path):
             if os.path.exists(path):
                 os.remove(path)
 
-@app.route('/python/update-transcript/<session_id>', methods=['PATCH'])
+@app.route('/python/update-transcript/<session_id>', methods=['PATCH', 'POST'])
 def incremental_transcript(session_id):
     try:
         audio_chunk = request.get_data()
@@ -443,15 +443,15 @@ def incremental_transcript(session_id):
             audio = r.record(source)
             new_text = r.recognize_google(audio)
             results = client.retrieve(
-            collection_name="videos",
-            ids=[session_id],
-            with_payload=True
+                collection_name="videos",
+                ids=[session_id],
+                with_payload=True
             )
             current = results.payload.get("transcript", "")
             client.set_payload(
-            collection_name="videos",
-            points=[session_id],
-            payload={"transcript": f"{current}\n{new_text}"}
+                collection_name="videos",
+                points=[session_id],
+                payload={"transcript": f"{current}\n{new_text}"}
             )
         return jsonify({"status": "updated"}), 200
 
